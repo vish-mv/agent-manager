@@ -26,11 +26,13 @@ import {
 import { CodeBlock } from "@agent-management-platform/shared-component";
 import {
   Alert,
+  Box,
   Button,
   Card,
   CardContent,
   Divider,
   Form,
+  FormLabel,
   IconButton,
   ListingTable,
   Skeleton,
@@ -551,23 +553,111 @@ export const ViewLLMProviderComponent: React.FC = () => {
     ?? providerConfig?.providerName
     ?? config.name;
 
-  const showPanel = !isExternal && (config.environmentVariables?.length ?? 0) > 0;
+  const showPanel = (isExternal && !!providerConfig) || (!isExternal && (config.environmentVariables?.length ?? 0) > 0);
 
   const envVarsPanel = showPanel && (
     <DrawerWrapper
       open={panelOpen}
-      onClose={() => setPanelOpen(false)}
+      onClose={(_, reason) => { if (isExternal && reason === "backdropClick") return; setPanelOpen(false); }}
       minWidth={640}
       maxWidth={640}
     >
       <DrawerHeader
         icon={<BookOpen size={24} />}
-        title="Environment Variables & Integration Guide"
+        title={isExternal ? "Connect to LLM Provider" : "Environment Variables & Integration Guide"}
         onClose={() => setPanelOpen(false)}
       />
       <DrawerContent>
         <Stack spacing={3}>
-        {isDirty && !updateConfig.isError && (
+        {isExternal && providerConfig && (() => {
+          const authEntry = authInfoByEnv?.[selectedEnvName];
+          const apiKeyEnvVar = config.environmentVariables?.find((ev) => ev.key === "apikey");
+          const headerName = authEntry?.name || "Authorization";
+          const headerValue = authEntry?.value || (apiKeyEnvVar ? `$${apiKeyEnvVar.name}` : "<api-key>");
+          const curlCode = [
+            `curl -X POST ${providerConfig.url || "<endpoint-url>"}`,
+            `  --header "${headerName}: ${headerValue}"`,
+            `  -d '{"model": "", "messages": [{"role": "user", "content": "Hi..."}]}'`,
+          ].join(" \\\n");
+          return (
+            <Stack spacing={2}>
+              {!authEntry && (
+                <Alert severity="info">
+                  <Typography variant="body2">
+                    The credentials for this provider were issued during initial setup. To route
+                    your agent&apos;s traffic through the governance layer, configure your client
+                    with the provided endpoint and API key.
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
+                    Security Reminder: Credentials are only displayed once at creation time.
+                  </Typography>
+                </Alert>
+              )}
+              {authEntry && (
+                <>
+                  <Alert severity="info">
+                    <Typography variant="body2">
+                      To route your agent&apos;s LLM traffic through the governance layer,
+                      configure your client with the credentials below.
+                    </Typography>
+                  </Alert>
+                  <Alert severity="warning">
+                    <Typography variant="body2" fontWeight={600}>
+                      Make sure to copy your API key now — you will not be able to see it again.
+                    </Typography>
+                  </Alert>
+                </>
+              )}
+              {Boolean(providerConfig.url) && (
+                <TextInput
+                  label="Endpoint URL"
+                  value={providerConfig.url ?? ""}
+                  copyable
+                  copyTooltipText="Copy Endpoint URL"
+                  slotProps={{ input: { readOnly: true } }}
+                  size="small"
+                />
+              )}
+              {authEntry && (
+                <TextInput
+                  label="Header Name"
+                  value={authEntry.name}
+                  copyable
+                  copyTooltipText="Copy Header Name"
+                  slotProps={{ input: { readOnly: true } }}
+                  size="small"
+                />
+              )}
+              {authEntry?.value && (
+                <TextInput
+                  label="API Key"
+                  type="password"
+                  value={authEntry.value}
+                  copyable
+                  copyTooltipText="Copy API Key"
+                  slotProps={{ input: { readOnly: true } }}
+                  size="small"
+                />
+              )}
+              {apiKeyValue && (
+                <TextInput
+                  label="API Key"
+                  type="password"
+                  value={apiKeyValue}
+                  copyable
+                  copyTooltipText="Copy API Key"
+                  slotProps={{ input: { readOnly: true } }}
+                  size="small"
+                />
+              )}
+              <Box>
+                <FormLabel sx={{ display: "block", mb: 0.5 }}>Example cURL</FormLabel>
+                <CodeBlock code={curlCode} language="bash" fieldId="curl" />
+              </Box>
+            </Stack>
+          );
+        })()}
+        {!isExternal && isDirty && !updateConfig.isError && (
           <Alert
             severity="warning"
             action={
@@ -590,6 +680,7 @@ export const ViewLLMProviderComponent: React.FC = () => {
           </Alert>
         )}
 
+        {!isExternal && <>
           <Stack spacing={1}>
             <Typography variant="subtitle1" fontWeight={600}>Environment Variable Names</Typography>
             <Typography variant="body2" color="text.secondary">
@@ -703,6 +794,7 @@ export const ViewLLMProviderComponent: React.FC = () => {
               />
             )}
           </Stack>
+        </>}
         </Stack>
       </DrawerContent>
     </DrawerWrapper>
@@ -722,7 +814,7 @@ export const ViewLLMProviderComponent: React.FC = () => {
             startIcon={<BookOpen size={16} />}
             onClick={() => setPanelOpen(true)}
           >
-            Environment Variables & Integration Guide
+            {isExternal ? "Connect to LLM Provider" : "Environment Variables & Integration Guide"}
           </Button>
         ) : undefined
       }
@@ -747,7 +839,9 @@ export const ViewLLMProviderComponent: React.FC = () => {
             {environments.length > 1 && (
               <>
                 <Typography variant="body2" color="text.secondary">
-                  Each environment uses a separate catalog provider. The same variable names are injected in all environments with environment-specific values.
+                  Each environment uses a separate catalog provider. 
+                  The same variable names are injected in all environments with 
+                  environment-specific values.
                 </Typography>
                 <Tabs
                   value={selectedEnvIndex}
@@ -765,98 +859,6 @@ export const ViewLLMProviderComponent: React.FC = () => {
               </>
             )}
 
-            {providerConfig && isExternal && (
-              <Stack spacing={2}>
-                <Typography variant="subtitle2">Connect to your LLM Provider</Typography>
-                {!authInfoByEnv?.[selectedEnvName] && (
-                  <Alert severity="info">
-                    <Typography variant="body2">
-                      The credentials for this provider were issued during initial
-                      setup. To route your agent&apos;s traffic through the
-                      governance layer, configure your client with the provided
-                      endpoint and API key.
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
-                      Security Reminder: Credentials are only displayed once at creation time.
-                    </Typography>
-                  </Alert>
-                )}
-                {authInfoByEnv?.[selectedEnvName] && (
-                  <Alert severity="info">
-                    <Typography variant="body2">
-                      To route your agent&apos;s LLM traffic through the governance layer,
-                      configure your client with the credentials below.
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
-                      Make sure to copy your API key now — you will not be able to see it again.
-                    </Typography>
-                  </Alert>
-                )}
-                {Boolean(providerConfig.url) && (
-                  <TextInput
-                    label="Endpoint URL"
-                    value={providerConfig.url ?? ""}
-                    copyable
-                    copyTooltipText="Copy Endpoint URL"
-                    slotProps={{ input: { readOnly: true } }}
-                    size="small"
-                  />
-                )}
-                {authInfoByEnv?.[selectedEnvName] && (
-                  <TextInput
-                    label="Header Name"
-                    value={authInfoByEnv[selectedEnvName].name}
-                    copyable
-                    copyTooltipText="Copy Header Name"
-                    slotProps={{ input: { readOnly: true } }}
-                    size="small"
-                  />
-                )}
-                {authInfoByEnv?.[selectedEnvName]?.value && (
-                  <TextInput
-                    label="API Key"
-                    type="password"
-                    value={authInfoByEnv[selectedEnvName].value}
-                    copyable
-                    copyTooltipText="Copy API Key"
-                    slotProps={{ input: { readOnly: true } }}
-                    size="small"
-                  />
-                )}
-                {apiKeyValue && (
-                  <TextInput
-                    label="API Key"
-                    type="password"
-                    value={apiKeyValue}
-                    copyable
-                    copyTooltipText="Copy API Key"
-                    slotProps={{ input: { readOnly: true } }}
-                    size="small"
-                  />
-                )}
-                {authInfoByEnv && (
-                  <TextInput
-                    label="Example cURL"
-                    value={[
-                      `curl -X POST ${providerConfig.url || "http://<endpoint-url>"}`,
-                      `  --header "${authInfoByEnv[selectedEnvName].name}: ${authInfoByEnv[selectedEnvName].value || "<api-key>"}"`,
-                      `  -d '{"your": "data"}'`,
-                    ].join(" \\\n")}
-                    copyable
-                    copyTooltipText="Copy cURL command"
-                    multiline
-                    minRows={3}
-                    slotProps={{
-                      input: {
-                        readOnly: true,
-                        sx: { fontFamily: "monospace", fontSize: "0.85rem" },
-                      },
-                    }}
-                    size="small"
-                  />
-                )}
-              </Stack>
-            )}
 
             <ProviderSelectDrawer
               open={providerDrawerOpen}

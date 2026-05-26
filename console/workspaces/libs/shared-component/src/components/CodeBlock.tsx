@@ -29,11 +29,11 @@ interface CodeBlockProps {
     fieldId?: string;
 }
 
-export const CodeBlock = ({ 
-    code, 
-    language = "bash", 
+export const CodeBlock = ({
+    code,
+    language = "bash",
     showCopyButton = true,
-    fieldId = "code" 
+    fieldId = "code"
 }: CodeBlockProps) => {
     const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -92,4 +92,3 @@ export const CodeBlock = ({
         </Box>
     );
 };
-
