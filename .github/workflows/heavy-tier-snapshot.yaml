@@ -1,0 +1,123 @@
+name: Heavy-tier snapshot
+
+# Builds the pre-baked k3d cluster snapshot the heavy-tier driver restores
+# from. Triggered on `workflow_dispatch` and when any AMP service image or
+# the helm charts change — the snapshot's value is that it bundles a known-
+# good combination, so it must be re-baked whenever that combination shifts.
+#
+# This workflow is intentionally a thin orchestration of the existing
+# `deployments/scripts/setup-*.sh` scripts so the local-dev and CI paths
+# share their plumbing. The heavy lifting (cluster bring-up, helm install,
+# readiness checks) lives in those scripts.
+#
+# OUTPUT: an artifact named `amp-heavy-snapshot` carrying the docker-saved
+# image set the cluster needs. The driver workflow restores it via
+# `k3d cluster import-images`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_cluster:
+        description: 'Keep the k3d cluster after snapshotting (for debugging)'
+        required: false
+        default: 'false'
+  push:
+    branches: [main]
+    paths:
+      - 'deployments/helm-charts/**'
+      - 'deployments/scripts/setup-k3d.sh'
+      - 'deployments/scripts/setup-prerequisites.sh'
+      - 'deployments/scripts/setup-openchoreo.sh'
+      - 'deployments/scripts/setup-platform.sh'
+      - 'agent-manager-service/Dockerfile'
+      - 'traces-observer-service/Dockerfile'
+      - 'python-instrumentation-provider/Dockerfile'
+      - '.github/release-config.json'
+      - '.github/workflows/heavy-tier-snapshot.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k3d
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          k3d version
+
+      - name: Install helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
+
+      # Cluster + prereqs + OpenChoreo + AMP platform follow the same
+      # sequence local dev uses. If these scripts evolve, the snapshot
+      # automatically reflects the change on the next dispatch.
+      - name: Provision k3d cluster
+        run: |
+          cd deployments/scripts
+          ./setup-k3d.sh
+          ./setup-prerequisites.sh
+
+      - name: Install OpenChoreo
+        run: |
+          cd deployments/scripts
+          ./setup-openchoreo.sh "$GITHUB_WORKSPACE"
+
+      # AMP-on-k3d gotcha (MEMORY.md): CoreDNS needs `host.k3d.internal`
+      # for the gateway controller to reach the control plane. The
+      # OpenChoreo bring-up handles this in local dev; if it doesn't fire
+      # in CI, deploy-time agent invocations will get 503s.
+      - name: Verify host.k3d.internal resolves
+        run: |
+          kubectl run dnscheck --rm -i --restart=Never --image=busybox -- \
+            nslookup host.k3d.internal || true
+
+      - name: Wait for AMP stack readiness
+        run: |
+          # Approximate readiness signal — adjust selectors as the helm chart
+          # evolves. The driver re-checks readiness on restore, so this is a
+          # snapshot-build sanity gate, not a deploy-time guarantee.
+          for selector in \
+              "app=opensearch" \
+              "app=obs-gateway" \
+              "app=agent-manager-service" \
+              "app=traces-observer-service"; do
+            kubectl wait --for=condition=ready pod -l "$selector" --timeout=300s --all-namespaces || \
+              echo "::warning::pods matching $selector not ready in time"
+          done
+
+      - name: Snapshot node images
+        run: |
+          mkdir -p snapshot
+          # k3d node images live in the containerd runtime; export from the
+          # server node and save as a single tarball. The driver's
+          # `restore_snapshot` uses `k3d cluster import-images` to reload.
+          NODE=$(docker ps --filter "label=k3d.cluster=openchoreo-local-setup" \
+                          --filter "label=k3d.role=server" \
+                          --format '{{.Names}}' | head -1)
+          docker exec "$NODE" sh -c 'ctr -n k8s.io images export - $(ctr -n k8s.io images list -q | tr "\n" " ")' \
+            > snapshot/images.tar
+          ls -lh snapshot/
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: amp-heavy-snapshot
+          path: snapshot/images.tar
+          retention-days: 14
+
+      - name: Cleanup
+        if: inputs.keep_cluster != 'true'
+        run: |
+          k3d cluster delete openchoreo-local-setup || true
