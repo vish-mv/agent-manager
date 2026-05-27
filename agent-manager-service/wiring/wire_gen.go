@@ -21,6 +21,7 @@ import (
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/eventhub"
 	"github.com/wso2/agent-manager/agent-manager-service/instrumentation"
+	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware/jwtassertion"
 	"github.com/wso2/agent-manager/agent-manager-service/repositories"
 	"github.com/wso2/agent-manager/agent-manager-service/services"
@@ -145,6 +146,7 @@ func InitializeAppParams(cfg *config.Config, db *gorm.DB, authProvider client.Au
 	gitSecretController := controllers.NewGitSecretController(gitSecretService)
 	thunderConfig := ProvideThunderConfig(configConfig)
 	identityClient := ProvideIdentityClient(thunderConfig)
+	orgResolver := ProvideOrgResolver(identityClient)
 	identityController := controllers.NewIdentityController(identityClient)
 	monitorSchedulerService := services.NewMonitorSchedulerService(openChoreoClient, publisherCredentialProvisioner, logger, monitorExecutor, monitorRepository)
 	traceObserverSvcClient, err := ProvideTraceObserverClient(configConfig, authProvider)
@@ -154,6 +156,7 @@ func InitializeAppParams(cfg *config.Config, db *gorm.DB, authProvider client.Au
 	appParams := &AppParams{
 		AuthMiddleware:                   middleware,
 		Logger:                           logger,
+		OrgResolver:                      orgResolver,
 		AgentController:                  agentController,
 		AgentKindController:              agentKindController,
 		InfraResourceController:          infraResourceController,
@@ -296,12 +299,14 @@ func InitializeTestAppParamsWithClientMocks(cfg *config.Config, db *gorm.DB, aut
 	gitSecretController := controllers.NewGitSecretController(gitSecretService)
 	thunderConfig := ProvideThunderConfig(configConfig)
 	identityClient := ProvideIdentityClient(thunderConfig)
+	orgResolver := ProvideOrgResolver(identityClient)
 	identityController := controllers.NewIdentityController(identityClient)
 	monitorSchedulerService := services.NewMonitorSchedulerService(openChoreoClient, publisherCredentialProvisioner, logger, monitorExecutor, monitorRepository)
 	traceObserverSvcClient := ProvideTestTraceObserverClient(testClients)
 	appParams := &AppParams{
 		AuthMiddleware:                   authMiddleware,
 		Logger:                           logger,
+		OrgResolver:                      orgResolver,
 		AgentController:                  agentController,
 		AgentKindController:              agentKindController,
 		InfraResourceController:          infraResourceController,
@@ -355,6 +360,7 @@ var clientProviderSet = wire.NewSet(
 	ProvideSecretManagementClient,
 	ProvidePublisherProvisioner,
 	ProvideIdentityClient,
+	ProvideOrgResolver,
 )
 
 var serviceProviderSet = wire.NewSet(services.NewAgentManagerService, services.NewAgentKindService, services.NewInfraResourceManager, services.NewAgentTokenManagerService, ProvideGitCredentialsService, services.NewRepositoryService, services.NewMonitorExecutor, services.NewMonitorManagerService, ProvideThunderConfig, services.NewMonitorSchedulerService, services.NewEvaluatorManagerService, services.NewEnvironmentService, services.NewPlatformGatewayService, services.NewLLMProviderTemplateService, services.NewLLMProviderService, services.NewLLMProxyService, services.NewLLMProviderDeploymentService, services.NewLLMProviderAPIKeyService, services.NewLLMProxyAPIKeyService, services.NewAgentAPIKeyService, services.NewLLMProxyDeploymentService, services.NewGatewayInternalAPIService, services.NewMonitorScoresService, services.NewCatalogService, services.NewLLMProxyProvisioner, services.NewAgentConfigurationService, services.NewLLMTemplateStore, services.NewGitSecretService)
@@ -374,6 +380,7 @@ var testClientProviderSet = wire.NewSet(
 	ProvideTestSecretManagementClient,
 	ProvidePublisherProvisioner,
 	ProvideIdentityClient,
+	ProvideOrgResolver,
 )
 
 // ProvideLogger provides the configured slog.Logger instance
@@ -685,4 +692,9 @@ func ProvideThunderConfig(cfg config.Config) config.ThunderConfig {
 // ProvideIdentityClient creates a Thunder identity client using the Thunder system app credentials.
 func ProvideIdentityClient(cfg config.ThunderConfig) thundersvc.IdentityClient {
 	return thundersvc.NewIdentityClient(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret)
+}
+
+// ProvideOrgResolver creates the org resolver backed by Thunder, with a per-org OU ID cache.
+func ProvideOrgResolver(client thundersvc.IdentityClient) middleware.OrgResolver {
+	return middleware.NewOrgResolver(client)
 }

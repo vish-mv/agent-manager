@@ -17,23 +17,22 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/rbac"
 )
 
-func registerInfraRoutes(mux *http.ServeMux, ctrl controllers.InfraResourceController) {
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs", rbac.OrgView, ctrl.ListOrganizations)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}", rbac.OrgView, ctrl.GetOrganization)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/data-planes", rbac.DataPlaneRead, ctrl.GetDataplanes)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/deployment-pipelines", rbac.DeploymentPipelineRead, ctrl.ListOrgDeploymentPipelines)
+func registerInfraRoutes(rr *middleware.RouteRegistrar, ctrl controllers.InfraResourceController) {
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs", rbac.OrgView, ctrl.ListOrganizations)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}", rbac.OrgView, ctrl.GetOrganization)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/data-planes", rbac.DataPlaneRead, ctrl.GetDataplanes)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/deployment-pipelines", rbac.DeploymentPipelineRead, ctrl.ListOrgDeploymentPipelines)
 	// NOTE: /orgs/{orgName}/environments routes are now registered in environment_routes.go
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/projects", rbac.ProjectRead, ctrl.ListProjects)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/projects", rbac.ProjectCreate, ctrl.CreateProject)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/projects/{projName}", rbac.ProjectRead, ctrl.GetProject)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/projects/{projName}", rbac.ProjectUpdate, ctrl.UpdateProject)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/projects/{projName}/deployment-pipeline", rbac.DeploymentPipelineRead, ctrl.GetProjectDeploymentPipeline)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/projects/{projName}", rbac.ProjectDelete, ctrl.DeleteProject)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/projects", rbac.ProjectRead, ctrl.ListProjects)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/projects", rbac.ProjectCreate, ctrl.CreateProject)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/projects/{projName}", rbac.ProjectRead, ctrl.GetProject)
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/projects/{projName}", rbac.ProjectUpdate, ctrl.UpdateProject)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/projects/{projName}/deployment-pipeline", rbac.DeploymentPipelineRead, ctrl.GetProjectDeploymentPipeline)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/projects/{projName}", rbac.ProjectDelete, ctrl.DeleteProject)
 }

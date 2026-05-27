@@ -17,47 +17,46 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/rbac"
 )
 
-func registerIdentityRoutes(mux *http.ServeMux, ctrl controllers.IdentityController) {
+func registerIdentityRoutes(rr *middleware.RouteRegistrar, ctrl controllers.IdentityController) {
 	// Users
-	middleware.HandleFuncWithValidationAndAnyAuthz(mux, "GET /orgs/{orgName}/identities/users", ctrl.ListUsers, rbac.OrgInviteMember, rbac.OrgRemoveMember)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/users/invite", rbac.OrgInviteMember, ctrl.InviteUser)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/users", rbac.OrgInviteMember, ctrl.CreateUser)
-	middleware.HandleFuncWithValidationAndAnyAuthz(mux, "GET /orgs/{orgName}/identities/users/{userID}", ctrl.GetUser, rbac.OrgInviteMember, rbac.OrgRemoveMember)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/identities/users/{userID}", rbac.OrgInviteMember, ctrl.UpdateUser)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/identities/users/{userID}", rbac.OrgRemoveMember, ctrl.DeleteUser)
-	middleware.HandleFuncWithValidationAndAnyAuthz(mux, "GET /orgs/{orgName}/identities/users/{userID}/groups", ctrl.GetUserGroups, rbac.OrgInviteMember, rbac.OrgRemoveMember)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/users/{userID}/roles", rbac.RoleRead, ctrl.GetUserRoles)
+	rr.HandleFuncWithValidationAndAnyAuthz("GET /orgs/{orgName}/identities/users", ctrl.ListUsers, rbac.OrgInviteMember, rbac.OrgRemoveMember)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/users/invite", rbac.OrgInviteMember, ctrl.InviteUser)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/users", rbac.OrgInviteMember, ctrl.CreateUser)
+	rr.HandleFuncWithValidationAndAnyAuthz("GET /orgs/{orgName}/identities/users/{userID}", ctrl.GetUser, rbac.OrgInviteMember, rbac.OrgRemoveMember)
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/identities/users/{userID}", rbac.OrgInviteMember, ctrl.UpdateUser)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/identities/users/{userID}", rbac.OrgRemoveMember, ctrl.DeleteUser)
+	rr.HandleFuncWithValidationAndAnyAuthz("GET /orgs/{orgName}/identities/users/{userID}/groups", ctrl.GetUserGroups, rbac.OrgInviteMember, rbac.OrgRemoveMember)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/users/{userID}/roles", rbac.RoleRead, ctrl.GetUserRoles)
 
 	// Groups
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/groups", rbac.GroupRead, ctrl.ListGroups)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/groups", rbac.GroupCreate, ctrl.CreateGroup)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/groups/{groupID}", rbac.GroupRead, ctrl.GetGroup)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/identities/groups/{groupID}", rbac.GroupUpdate, ctrl.UpdateGroup)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/identities/groups/{groupID}", rbac.GroupDelete, ctrl.DeleteGroup)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/groups/{groupID}/members", rbac.GroupRead, ctrl.GetGroupMembers)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/groups/{groupID}/members/add", rbac.GroupUpdate, ctrl.AddGroupMembers)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/groups/{groupID}/members/remove", rbac.GroupUpdate, ctrl.RemoveGroupMembers)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/groups/{groupID}/roles", rbac.GroupRead, ctrl.GetGroupRoles)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/groups", rbac.GroupRead, ctrl.ListGroups)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/groups", rbac.GroupCreate, ctrl.CreateGroup)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/groups/{groupID}", rbac.GroupRead, ctrl.GetGroup)
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/identities/groups/{groupID}", rbac.GroupUpdate, ctrl.UpdateGroup)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/identities/groups/{groupID}", rbac.GroupDelete, ctrl.DeleteGroup)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/groups/{groupID}/members", rbac.GroupRead, ctrl.GetGroupMembers)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/groups/{groupID}/members/add", rbac.GroupUpdate, ctrl.AddGroupMembers)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/groups/{groupID}/members/remove", rbac.GroupUpdate, ctrl.RemoveGroupMembers)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/groups/{groupID}/roles", rbac.GroupRead, ctrl.GetGroupRoles)
 
 	// Roles
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/roles", rbac.RoleRead, ctrl.ListRoles)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/roles", rbac.RoleCreate, ctrl.CreateRole)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/roles/{roleID}", rbac.RoleRead, ctrl.GetRole)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/identities/roles/{roleID}", rbac.RoleUpdate, ctrl.UpdateRole)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/identities/roles/{roleID}", rbac.RoleDelete, ctrl.DeleteRole)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/roles/{roleID}/assignments", rbac.RoleRead, ctrl.GetRoleAssignments)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/roles/{roleID}/permissions/add", rbac.RoleUpdate, ctrl.AddRolePermissions)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/roles/{roleID}/permissions/remove", rbac.RoleUpdate, ctrl.RemoveRolePermissions)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/roles/{roleID}/assignees/add", rbac.RoleUpdate, ctrl.AddRoleAssignees)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/identities/roles/{roleID}/assignees/remove", rbac.RoleUpdate, ctrl.RemoveRoleAssignees)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/roles", rbac.RoleRead, ctrl.ListRoles)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/roles", rbac.RoleCreate, ctrl.CreateRole)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/roles/{roleID}", rbac.RoleRead, ctrl.GetRole)
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/identities/roles/{roleID}", rbac.RoleUpdate, ctrl.UpdateRole)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/identities/roles/{roleID}", rbac.RoleDelete, ctrl.DeleteRole)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/roles/{roleID}/assignments", rbac.RoleRead, ctrl.GetRoleAssignments)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/roles/{roleID}/permissions/add", rbac.RoleUpdate, ctrl.AddRolePermissions)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/roles/{roleID}/permissions/remove", rbac.RoleUpdate, ctrl.RemoveRolePermissions)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/roles/{roleID}/assignees/add", rbac.RoleUpdate, ctrl.AddRoleAssignees)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/identities/roles/{roleID}/assignees/remove", rbac.RoleUpdate, ctrl.RemoveRoleAssignees)
 
 	// Permissions catalog
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/identities/permissions", rbac.RoleRead, ctrl.ListAMPPermissions)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/identities/permissions", rbac.RoleRead, ctrl.ListAMPPermissions)
 }

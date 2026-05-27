@@ -1,0 +1,84 @@
+// Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package middleware
+
+import (
+	"context"
+	"sync"
+
+	"github.com/wso2/agent-manager/agent-manager-service/clients/thundersvc"
+)
+
+// ResolvedOrg holds the org name and its Thunder OU ID, injected into the
+// request context by RequireOrgMatch after successful validation.
+type ResolvedOrg struct {
+	Name string
+	OUID string
+}
+
+type resolvedOrgKey struct{}
+
+// WithResolvedOrg stores a ResolvedOrg in the context.
+func WithResolvedOrg(ctx context.Context, org ResolvedOrg) context.Context {
+	return context.WithValue(ctx, resolvedOrgKey{}, org)
+}
+
+// GetResolvedOrg retrieves the ResolvedOrg injected by RequireOrgMatch.
+func GetResolvedOrg(ctx context.Context) (ResolvedOrg, bool) {
+	org, ok := ctx.Value(resolvedOrgKey{}).(ResolvedOrg)
+	return org, ok
+}
+
+// OrgResolver resolves an org handle to a Thunder OU ID.
+type OrgResolver interface {
+	ResolveOUID(ctx context.Context, orgName string) (string, error)
+}
+
+type thunderOrgResolver struct {
+	client    thundersvc.IdentityClient
+	mu        sync.RWMutex
+	ouIDByOrg map[string]string
+}
+
+// NewOrgResolver returns an OrgResolver backed by Thunder, with a per-org cache.
+func NewOrgResolver(client thundersvc.IdentityClient) OrgResolver {
+	return &thunderOrgResolver{
+		client:    client,
+		ouIDByOrg: make(map[string]string),
+	}
+}
+
+func (r *thunderOrgResolver) ResolveOUID(ctx context.Context, orgName string) (string, error) {
+	r.mu.RLock()
+	if id, ok := r.ouIDByOrg[orgName]; ok {
+		r.mu.RUnlock()
+		return id, nil
+	}
+	r.mu.RUnlock()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if id, ok := r.ouIDByOrg[orgName]; ok {
+		return id, nil
+	}
+	id, err := r.client.GetOUIDByHandle(ctx, orgName)
+	if err != nil {
+		return "", err
+	}
+	r.ouIDByOrg[orgName] = id
+	return id, nil
+}

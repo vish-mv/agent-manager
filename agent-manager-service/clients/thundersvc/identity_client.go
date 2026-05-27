@@ -32,6 +32,7 @@ import (
 type IdentityClient interface {
 	// Users
 	ListUsers(ctx context.Context, offset, limit int) ([]ThunderUser, int, error)
+	ListUsersByOUHandle(ctx context.Context, ouHandle string, offset, limit int) ([]ThunderUser, int, error)
 	GetUser(ctx context.Context, userID string) (*ThunderUser, error)
 	CreateUser(ctx context.Context, req CreateUserRequest) (*ThunderUser, error)
 	UpdateUser(ctx context.Context, userID string, req UpdateUserRequest) (*ThunderUser, error)
@@ -41,7 +42,7 @@ type IdentityClient interface {
 	InviteUser(ctx context.Context, email string) (string, error)
 
 	// Groups
-	ListGroups(ctx context.Context, offset, limit int) ([]ThunderGroup, int, error)
+	ListGroups(ctx context.Context, ouID string, offset, limit int) ([]ThunderGroup, int, error)
 	GetGroup(ctx context.Context, groupID string) (*ThunderGroup, error)
 	CreateGroup(ctx context.Context, req CreateGroupRequest) (*ThunderGroup, error)
 	UpdateGroup(ctx context.Context, groupID string, req UpdateGroupRequest) (*ThunderGroup, error)
@@ -52,7 +53,7 @@ type IdentityClient interface {
 	GetGroupRoles(ctx context.Context, groupID string) ([]ThunderRole, error)
 
 	// Roles
-	ListRoles(ctx context.Context, offset, limit int) ([]ThunderRole, int, error)
+	ListRoles(ctx context.Context, ouID string, offset, limit int) ([]ThunderRole, int, error)
 	GetRole(ctx context.Context, roleID string) (*ThunderRole, error)
 	CreateRole(ctx context.Context, req CreateRoleRequest) (*ThunderRole, error)
 	UpdateRole(ctx context.Context, roleID string, req UpdateRoleRequest) (*ThunderRole, error)
@@ -99,6 +100,32 @@ func (c *thunderClient) ListUsers(ctx context.Context, offset, limit int) ([]Thu
 		return nil, 0, fmt.Errorf("thunder list users decode: %w", err)
 	}
 	return wrapped.Users, wrapped.TotalResults, nil
+}
+
+func (c *thunderClient) ListUsersByOUHandle(ctx context.Context, ouHandle string, offset, limit int) ([]ThunderUser, int, error) {
+	token, err := c.getSystemToken(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	// /users/tree/{handle} returns only IDs; fetch full details per user.
+	url := fmt.Sprintf("%s/users/tree/%s?offset=%d&limit=%d", c.baseURL, ouHandle, offset, limit)
+	body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("thunder list users by ou handle: %w", err)
+	}
+	var wrapped thunderUserList
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return nil, 0, fmt.Errorf("thunder list users by ou handle decode: %w", err)
+	}
+	users := make([]ThunderUser, 0, len(wrapped.Users))
+	for _, stub := range wrapped.Users {
+		full, err := c.GetUser(ctx, stub.ID)
+		if err != nil {
+			return nil, 0, fmt.Errorf("thunder list users by ou handle (get user %s): %w", stub.ID, err)
+		}
+		users = append(users, *full)
+	}
+	return users, wrapped.TotalResults, nil
 }
 
 func (c *thunderClient) GetUser(ctx context.Context, userID string) (*ThunderUser, error) {
@@ -190,21 +217,58 @@ func (c *thunderClient) GetUserGroups(ctx context.Context, userID string) ([]Thu
 
 // --- Groups ---
 
-func (c *thunderClient) ListGroups(ctx context.Context, offset, limit int) ([]ThunderGroup, int, error) {
+// ListGroups returns groups scoped to ouID when non-empty, by fetching all pages
+// from Thunder and filtering client-side (Thunder has no OU-scoped list endpoint for groups).
+func (c *thunderClient) ListGroups(ctx context.Context, ouID string, offset, limit int) ([]ThunderGroup, int, error) {
 	token, err := c.getSystemToken(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	url := fmt.Sprintf("%s/groups?offset=%d&limit=%d", c.baseURL, offset, limit)
-	body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
-	if err != nil {
-		return nil, 0, fmt.Errorf("thunder list groups: %w", err)
+	if ouID == "" {
+		url := fmt.Sprintf("%s/groups?offset=%d&limit=%d", c.baseURL, offset, limit)
+		body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("thunder list groups: %w", err)
+		}
+		var wrapped thunderGroupList
+		if err := json.Unmarshal(body, &wrapped); err != nil {
+			return nil, 0, fmt.Errorf("thunder list groups decode: %w", err)
+		}
+		return wrapped.Groups, wrapped.TotalResults, nil
 	}
-	var wrapped thunderGroupList
-	if err := json.Unmarshal(body, &wrapped); err != nil {
-		return nil, 0, fmt.Errorf("thunder list groups decode: %w", err)
+
+	const fetchSize = 100
+	var all []ThunderGroup
+	fetchOffset := 0
+	for {
+		url := fmt.Sprintf("%s/groups?offset=%d&limit=%d", c.baseURL, fetchOffset, fetchSize)
+		body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("thunder list groups: %w", err)
+		}
+		var wrapped thunderGroupList
+		if err := json.Unmarshal(body, &wrapped); err != nil {
+			return nil, 0, fmt.Errorf("thunder list groups decode: %w", err)
+		}
+		for _, g := range wrapped.Groups {
+			if g.OuID == ouID {
+				all = append(all, g)
+			}
+		}
+		fetchOffset += len(wrapped.Groups)
+		if fetchOffset >= wrapped.TotalResults || len(wrapped.Groups) == 0 {
+			break
+		}
 	}
-	return wrapped.Groups, wrapped.TotalResults, nil
+	total := len(all)
+	if offset >= total {
+		return []ThunderGroup{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return all[offset:end], total, nil
 }
 
 func (c *thunderClient) GetGroup(ctx context.Context, groupID string) (*ThunderGroup, error) {
@@ -352,7 +416,7 @@ func (c *thunderClient) GetGroupRoles(ctx context.Context, groupID string) ([]Th
 	var allRoles []ThunderRole
 	offset := 0
 	for {
-		page, total, err := c.ListRoles(ctx, offset, pageSize)
+		page, total, err := c.ListRoles(ctx, "", offset, pageSize)
 		if err != nil {
 			return nil, fmt.Errorf("thunder get group roles (list): %w", err)
 		}
@@ -384,7 +448,7 @@ func (c *thunderClient) GetUserRoles(ctx context.Context, userID string) ([]Thun
 	var allRoles []ThunderRole
 	offset := 0
 	for {
-		page, total, err := c.ListRoles(ctx, offset, pageSize)
+		page, total, err := c.ListRoles(ctx, "", offset, pageSize)
 		if err != nil {
 			return nil, fmt.Errorf("thunder get user roles (list): %w", err)
 		}
@@ -413,21 +477,58 @@ func (c *thunderClient) GetUserRoles(ctx context.Context, userID string) ([]Thun
 
 // --- Roles ---
 
-func (c *thunderClient) ListRoles(ctx context.Context, offset, limit int) ([]ThunderRole, int, error) {
+// ListRoles returns roles scoped to ouID when non-empty, by fetching all pages
+// from Thunder and filtering client-side (Thunder has no OU-scoped list endpoint for roles).
+func (c *thunderClient) ListRoles(ctx context.Context, ouID string, offset, limit int) ([]ThunderRole, int, error) {
 	token, err := c.getSystemToken(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	url := fmt.Sprintf("%s/roles?offset=%d&limit=%d", c.baseURL, offset, limit)
-	body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
-	if err != nil {
-		return nil, 0, fmt.Errorf("thunder list roles: %w", err)
+	if ouID == "" {
+		url := fmt.Sprintf("%s/roles?offset=%d&limit=%d", c.baseURL, offset, limit)
+		body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("thunder list roles: %w", err)
+		}
+		var wrapped thunderRoleList
+		if err := json.Unmarshal(body, &wrapped); err != nil {
+			return nil, 0, fmt.Errorf("thunder list roles decode: %w", err)
+		}
+		return wrapped.Roles, wrapped.TotalResults, nil
 	}
-	var wrapped thunderRoleList
-	if err := json.Unmarshal(body, &wrapped); err != nil {
-		return nil, 0, fmt.Errorf("thunder list roles decode: %w", err)
+
+	const fetchSize = 100
+	var all []ThunderRole
+	fetchOffset := 0
+	for {
+		url := fmt.Sprintf("%s/roles?offset=%d&limit=%d", c.baseURL, fetchOffset, fetchSize)
+		body, err := c.doRequest(ctx, http.MethodGet, url, token, nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("thunder list roles: %w", err)
+		}
+		var wrapped thunderRoleList
+		if err := json.Unmarshal(body, &wrapped); err != nil {
+			return nil, 0, fmt.Errorf("thunder list roles decode: %w", err)
+		}
+		for _, role := range wrapped.Roles {
+			if role.OuID == ouID {
+				all = append(all, role)
+			}
+		}
+		fetchOffset += len(wrapped.Roles)
+		if fetchOffset >= wrapped.TotalResults || len(wrapped.Roles) == 0 {
+			break
+		}
 	}
-	return wrapped.Roles, wrapped.TotalResults, nil
+	total := len(all)
+	if offset >= total {
+		return []ThunderRole{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return all[offset:end], total, nil
 }
 
 func (c *thunderClient) GetRole(ctx context.Context, roleID string) (*ThunderRole, error) {

@@ -17,23 +17,22 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/rbac"
 )
 
-func registerEvaluatorRoutes(mux *http.ServeMux, controller controllers.EvaluatorController) {
+func registerEvaluatorRoutes(rr *middleware.RouteRegistrar, controller controllers.EvaluatorController) {
 	// GET /orgs/{orgName}/evaluators - List evaluators (built-in + custom merged)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/evaluators", rbac.EvaluatorRead, controller.ListEvaluators)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/evaluators", rbac.EvaluatorRead, controller.ListEvaluators)
 
 	// Custom evaluator CRUD — registered before the {evaluatorId} catch-all
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/evaluators/custom", rbac.EvaluatorCreate, controller.CreateCustomEvaluator)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/evaluators/custom/{identifier}", rbac.EvaluatorRead, controller.GetCustomEvaluator)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/evaluators/custom/{identifier}", rbac.EvaluatorUpdate, controller.UpdateCustomEvaluator)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/evaluators/custom/{identifier}", rbac.EvaluatorDelete, controller.DeleteCustomEvaluator)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/evaluators/custom", rbac.EvaluatorCreate, controller.CreateCustomEvaluator)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/evaluators/custom/{identifier}", rbac.EvaluatorRead, controller.GetCustomEvaluator)
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/evaluators/custom/{identifier}", rbac.EvaluatorUpdate, controller.UpdateCustomEvaluator)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/evaluators/custom/{identifier}", rbac.EvaluatorDelete, controller.DeleteCustomEvaluator)
 
 	// GET /orgs/{orgName}/evaluators/{evaluatorId} - Get evaluator details (built-in or custom)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/evaluators/{evaluatorId}", rbac.EvaluatorRead, controller.GetEvaluator)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/evaluators/{evaluatorId}", rbac.EvaluatorRead, controller.GetEvaluator)
 }

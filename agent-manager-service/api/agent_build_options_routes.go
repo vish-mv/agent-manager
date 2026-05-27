@@ -17,12 +17,11 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 )
 
-func registerAgentBuildOptionsRoutes(mux *http.ServeMux, ctrl controllers.AgentBuildOptionsController) {
-	middleware.HandleFuncWithValidation(mux, "GET /orgs/{orgName}/agent-build-options", ctrl.GetAgentBuildOptions)
+func registerAgentBuildOptionsRoutes(rr *middleware.RouteRegistrar, ctrl controllers.AgentBuildOptionsController) {
+	rr.HandleFuncWithValidation("GET /orgs/{orgName}/agent-build-options", ctrl.GetAgentBuildOptions)
 }

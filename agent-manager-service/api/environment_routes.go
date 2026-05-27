@@ -17,21 +17,20 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/rbac"
 )
 
-func registerEnvironmentRoutes(mux *http.ServeMux, ctrl controllers.EnvironmentController) {
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/environments", rbac.EnvironmentCreate, ctrl.CreateEnvironment)
-	middleware.HandleFuncWithValidationAndAnyAuthz(mux, "GET /orgs/{orgName}/environments", ctrl.ListEnvironments,
+func registerEnvironmentRoutes(rr *middleware.RouteRegistrar, ctrl controllers.EnvironmentController) {
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/environments", rbac.EnvironmentCreate, ctrl.CreateEnvironment)
+	rr.HandleFuncWithValidationAndAnyAuthz("GET /orgs/{orgName}/environments", ctrl.ListEnvironments,
 		rbac.EnvironmentRead, rbac.LLMProviderRead, rbac.LLMProxyRead, rbac.GatewayRead)
-	middleware.HandleFuncWithValidationAndAnyAuthz(mux, "GET /orgs/{orgName}/environments/{envID}", ctrl.GetEnvironment,
+	rr.HandleFuncWithValidationAndAnyAuthz("GET /orgs/{orgName}/environments/{envID}", ctrl.GetEnvironment,
 		rbac.EnvironmentRead, rbac.LLMProviderRead, rbac.LLMProxyRead, rbac.GatewayRead)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/environments/{envID}", rbac.EnvironmentUpdate, ctrl.UpdateEnvironment)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/environments/{envID}", rbac.EnvironmentDelete, ctrl.DeleteEnvironment)
-	middleware.HandleFuncWithValidationAndAnyAuthz(mux, "GET /orgs/{orgName}/environments/{envID}/gateways", ctrl.GetEnvironmentGateways,
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/environments/{envID}", rbac.EnvironmentUpdate, ctrl.UpdateEnvironment)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/environments/{envID}", rbac.EnvironmentDelete, ctrl.DeleteEnvironment)
+	rr.HandleFuncWithValidationAndAnyAuthz("GET /orgs/{orgName}/environments/{envID}/gateways", ctrl.GetEnvironmentGateways,
 		rbac.EnvironmentRead, rbac.GatewayRead)
 }

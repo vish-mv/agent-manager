@@ -25,9 +25,9 @@ import (
 )
 
 // RegisterMonitorPublisherRoutes registers monitor score publishing routes under the /publisher/ prefix.
-func RegisterMonitorPublisherRoutes(mux *http.ServeMux, ctrl controllers.MonitorScoresPublisherController) {
+func RegisterMonitorPublisherRoutes(rr *middleware.RouteRegistrar, ctrl controllers.MonitorScoresPublisherController) {
 	// POST /publisher/monitors/{monitorId}/runs/{runId}/scores - Publish evaluation scores
 	handler := jwtassertion.PublisherClientAuthMiddleware()(http.HandlerFunc(ctrl.PublishScores))
-	middleware.HandleFuncWithValidation(mux, route("POST", "/publisher/monitors/{monitorId}/runs/{runId}/scores"),
+	rr.HandleFuncWithValidation(route("POST", "/publisher/monitors/{monitorId}/runs/{runId}/scores"),
 		handler.ServeHTTP)
 }

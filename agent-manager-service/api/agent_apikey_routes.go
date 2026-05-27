@@ -17,17 +17,16 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 )
 
 // RegisterAgentAPIKeyRoutes registers API key routes for agents
-func RegisterAgentAPIKeyRoutes(mux *http.ServeMux, ctrl controllers.AgentAPIKeyController) {
-	middleware.HandleFuncWithValidation(mux, "POST /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys", ctrl.CreateAPIKey)
-	middleware.HandleFuncWithValidation(mux, "POST /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys/test", ctrl.IssueTestAPIKey)
-	middleware.HandleFuncWithValidation(mux, "GET /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys", ctrl.ListAPIKeys)
-	middleware.HandleFuncWithValidation(mux, "DELETE /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys/{keyName}", ctrl.RevokeAPIKey)
-	middleware.HandleFuncWithValidation(mux, "PUT /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys/{keyName}", ctrl.RotateAPIKey)
+func RegisterAgentAPIKeyRoutes(rr *middleware.RouteRegistrar, ctrl controllers.AgentAPIKeyController) {
+	rr.HandleFuncWithValidation("POST /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys", ctrl.CreateAPIKey)
+	rr.HandleFuncWithValidation("POST /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys/test", ctrl.IssueTestAPIKey)
+	rr.HandleFuncWithValidation("GET /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys", ctrl.ListAPIKeys)
+	rr.HandleFuncWithValidation("DELETE /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys/{keyName}", ctrl.RevokeAPIKey)
+	rr.HandleFuncWithValidation("PUT /orgs/{orgName}/projects/{projName}/agents/{agentName}/environments/{envID}/api-keys/{keyName}", ctrl.RotateAPIKey)
 }

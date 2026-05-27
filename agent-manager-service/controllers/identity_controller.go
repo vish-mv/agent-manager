@@ -21,10 +21,9 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/wso2/agent-manager/agent-manager-service/clients/thundersvc"
-	"github.com/wso2/agent-manager/agent-manager-service/middleware/jwtassertion"
+	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware/logger"
 	"github.com/wso2/agent-manager/agent-manager-service/utils"
 )
@@ -69,9 +68,7 @@ type IdentityController interface {
 }
 
 type identityController struct {
-	client    thundersvc.IdentityClient
-	ouIDMu    sync.RWMutex
-	ouIDByOrg map[string]string
+	client thundersvc.IdentityClient
 }
 
 // NewIdentityController creates a new identity controller.
@@ -79,59 +76,17 @@ func NewIdentityController(client thundersvc.IdentityClient) IdentityController 
 	return &identityController{client: client}
 }
 
-// resolveOuID returns the Thunder OU ID for orgName, caching per org.
-// Failures are not cached so callers can retry on transient errors.
-func (c *identityController) resolveOuID(r *http.Request, orgName string) (string, error) {
-	c.ouIDMu.RLock()
-	if id, ok := c.ouIDByOrg[orgName]; ok {
-		c.ouIDMu.RUnlock()
-		return id, nil
-	}
-	c.ouIDMu.RUnlock()
-
-	c.ouIDMu.Lock()
-	defer c.ouIDMu.Unlock()
-	if id, ok := c.ouIDByOrg[orgName]; ok {
-		return id, nil
-	}
-	id, err := c.client.GetOUIDByHandle(r.Context(), orgName)
-	if err != nil {
-		return "", err
-	}
-	if c.ouIDByOrg == nil {
-		c.ouIDByOrg = make(map[string]string)
-	}
-	c.ouIDByOrg[orgName] = id
-	return id, nil
-}
-
-// requireOrgMatch extracts {orgName} from the path and verifies the caller has a
-// valid JWT for this deployment. Full per-org isolation via OuHandle is forward-
-// compatible: once Thunder starts issuing ouHandle the check activates automatically.
-// OuId cannot be used for this check because we have no mapping from orgName → ouId
-// without an extra Thunder round-trip.
-func (c *identityController) requireOrgMatch(w http.ResponseWriter, r *http.Request) (string, bool) {
-	orgName := r.PathValue(utils.PathParamOrgName)
-	claims := jwtassertion.GetTokenClaims(r.Context())
-	if claims == nil {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "missing token claims")
-		return "", false
-	}
-	if claims.OuHandle != "" && claims.OuHandle != orgName {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "org identity mismatch")
-		return "", false
-	}
-	return orgName, true
-}
-
 // --- Users ---
 
 func (c *identityController) ListUsers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
+
+	org, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
+		return
+	}
 
 	offset := getIntQueryParam(r, "offset", 0)
 	limit := getIntQueryParam(r, "limit", 20)
@@ -142,9 +97,9 @@ func (c *identityController) ListUsers(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	users, total, err := c.client.ListUsers(ctx, offset, limit)
+	users, total, err := c.client.ListUsersByOUHandle(ctx, org.Name, offset, limit)
 	if err != nil {
-		log.Error("ListUsers failed", "error", err)
+		log.Error("ListUsers failed", "ouHandle", org.Name, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to list users")
 		return
 	}
@@ -152,9 +107,6 @@ func (c *identityController) ListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *identityController) GetUser(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
@@ -173,12 +125,14 @@ func (c *identityController) GetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *identityController) CreateUser(w http.ResponseWriter, r *http.Request) {
-	orgName, ok := c.requireOrgMatch(w, r)
-	if !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
+
+	org, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
+		return
+	}
 
 	var body struct {
 		Username   string                    `json:"username"`
@@ -199,12 +153,7 @@ func (c *identityController) CreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ouID, err := c.resolveOuID(r, orgName)
-	if err != nil {
-		log.Error("resolveOuID failed for CreateUser", "error", err)
-		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
-		return
-	}
+	ouID := org.OUID
 
 	attrs := map[string]string{"username": body.Username}
 	for _, claim := range body.Claims {
@@ -235,9 +184,6 @@ func (c *identityController) CreateUser(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
@@ -262,9 +208,6 @@ func (c *identityController) UpdateUser(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
@@ -282,9 +225,6 @@ func (c *identityController) DeleteUser(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) GetUserGroups(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
@@ -303,9 +243,6 @@ func (c *identityController) GetUserGroups(w http.ResponseWriter, r *http.Reques
 }
 
 func (c *identityController) GetUserRoles(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
@@ -324,9 +261,6 @@ func (c *identityController) GetUserRoles(w http.ResponseWriter, r *http.Request
 }
 
 func (c *identityController) InviteUser(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
@@ -354,11 +288,14 @@ func (c *identityController) InviteUser(w http.ResponseWriter, r *http.Request) 
 // --- Groups ---
 
 func (c *identityController) ListGroups(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
+
+	org, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
+		return
+	}
 
 	offset := getIntQueryParam(r, "offset", 0)
 	limit := getIntQueryParam(r, "limit", 20)
@@ -369,9 +306,9 @@ func (c *identityController) ListGroups(w http.ResponseWriter, r *http.Request) 
 		offset = 0
 	}
 
-	groups, total, err := c.client.ListGroups(ctx, offset, limit)
+	groups, total, err := c.client.ListGroups(ctx, org.OUID, offset, limit)
 	if err != nil {
-		log.Error("ListGroups failed", "error", err)
+		log.Error("ListGroups failed", "ouID", org.OUID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to list groups")
 		return
 	}
@@ -379,9 +316,6 @@ func (c *identityController) ListGroups(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) GetGroup(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -400,12 +334,14 @@ func (c *identityController) GetGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *identityController) CreateGroup(w http.ResponseWriter, r *http.Request) {
-	orgName, ok := c.requireOrgMatch(w, r)
-	if !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
+
+	org, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
+		return
+	}
 
 	var req thundersvc.CreateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -416,13 +352,7 @@ func (c *identityController) CreateGroup(w http.ResponseWriter, r *http.Request)
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	ouID, err := c.resolveOuID(r, orgName)
-	if err != nil {
-		log.Error("resolveOuID failed for CreateGroup", "error", err)
-		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
-		return
-	}
-	req.OuID = ouID
+	req.OuID = org.OUID
 
 	group, err := c.client.CreateGroup(ctx, req)
 	if err != nil {
@@ -434,9 +364,6 @@ func (c *identityController) CreateGroup(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *identityController) UpdateGroup(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -461,9 +388,6 @@ func (c *identityController) UpdateGroup(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *identityController) DeleteGroup(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -481,9 +405,6 @@ func (c *identityController) DeleteGroup(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *identityController) AddGroupMembers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -513,9 +434,6 @@ func (c *identityController) AddGroupMembers(w http.ResponseWriter, r *http.Requ
 }
 
 func (c *identityController) RemoveGroupMembers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -545,9 +463,6 @@ func (c *identityController) RemoveGroupMembers(w http.ResponseWriter, r *http.R
 }
 
 func (c *identityController) GetGroupMembers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -572,9 +487,6 @@ func (c *identityController) GetGroupMembers(w http.ResponseWriter, r *http.Requ
 }
 
 func (c *identityController) GetGroupRoles(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
@@ -595,11 +507,14 @@ func (c *identityController) GetGroupRoles(w http.ResponseWriter, r *http.Reques
 // --- Roles ---
 
 func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
+
+	org, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
+		return
+	}
 
 	offset := getIntQueryParam(r, "offset", 0)
 	limit := getIntQueryParam(r, "limit", 20)
@@ -607,9 +522,9 @@ func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
 		limit = 20
 	}
 
-	roles, total, err := c.client.ListRoles(ctx, offset, limit)
+	roles, total, err := c.client.ListRoles(ctx, org.OUID, offset, limit)
 	if err != nil {
-		log.Error("ListRoles failed", "error", err)
+		log.Error("ListRoles failed", "ouID", org.OUID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to list roles")
 		return
 	}
@@ -617,9 +532,6 @@ func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *identityController) GetRole(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -638,12 +550,14 @@ func (c *identityController) GetRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *identityController) CreateRole(w http.ResponseWriter, r *http.Request) {
-	orgName, ok := c.requireOrgMatch(w, r)
-	if !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
+
+	org, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
+		return
+	}
 
 	var req thundersvc.CreateRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -654,13 +568,7 @@ func (c *identityController) CreateRole(w http.ResponseWriter, r *http.Request) 
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	ouID, err := c.resolveOuID(r, orgName)
-	if err != nil {
-		log.Error("resolveOuID failed for CreateRole", "error", err)
-		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to resolve organization unit")
-		return
-	}
-	req.OuID = ouID
+	req.OuID = org.OUID
 
 	role, err := c.client.CreateRole(ctx, req)
 	if err != nil {
@@ -672,9 +580,6 @@ func (c *identityController) CreateRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) UpdateRole(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -699,9 +604,6 @@ func (c *identityController) UpdateRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) DeleteRole(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -719,9 +621,6 @@ func (c *identityController) DeleteRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *identityController) GetRoleAssignments(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -740,9 +639,6 @@ func (c *identityController) GetRoleAssignments(w http.ResponseWriter, r *http.R
 }
 
 func (c *identityController) AddRolePermissions(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -766,9 +662,6 @@ func (c *identityController) AddRolePermissions(w http.ResponseWriter, r *http.R
 }
 
 func (c *identityController) RemoveRolePermissions(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -792,9 +685,6 @@ func (c *identityController) RemoveRolePermissions(w http.ResponseWriter, r *htt
 }
 
 func (c *identityController) AddRoleAssignees(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -818,9 +708,6 @@ func (c *identityController) AddRoleAssignees(w http.ResponseWriter, r *http.Req
 }
 
 func (c *identityController) RemoveRoleAssignees(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
@@ -869,9 +756,6 @@ func decodeRoleAssigneeRequest(r *http.Request) (thundersvc.RoleAssignmentsReque
 // --- Permissions catalog ---
 
 func (c *identityController) ListAMPPermissions(w http.ResponseWriter, r *http.Request) {
-	if _, ok := c.requireOrgMatch(w, r); !ok {
-		return
-	}
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 

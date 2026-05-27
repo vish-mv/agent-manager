@@ -17,25 +17,24 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/rbac"
 )
 
-func RegisterGatewayRoutes(mux *http.ServeMux, ctrl controllers.GatewayController) {
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/gateways", rbac.GatewayCreate, ctrl.RegisterGateway)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/gateways", rbac.GatewayRead, ctrl.ListGateways)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/gateways/{gatewayID}", rbac.GatewayRead, ctrl.GetGateway)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "PUT /orgs/{orgName}/gateways/{gatewayID}", rbac.GatewayUpdate, ctrl.UpdateGateway)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/gateways/{gatewayID}", rbac.GatewayDelete, ctrl.DeleteGateway)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/gateways/{gatewayID}/environments/{envID}", rbac.GatewayUpdate, ctrl.AssignGatewayToEnvironment)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/gateways/{gatewayID}/environments/{envID}", rbac.GatewayUpdate, ctrl.RemoveGatewayFromEnvironment)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/gateways/{gatewayID}/environments", rbac.GatewayRead, ctrl.GetGatewayEnvironments)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/gateways/{gatewayID}/health", rbac.GatewayRead, ctrl.CheckGatewayHealth)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/gateways/{gatewayID}/tokens", rbac.GatewayTokenManage, ctrl.ListGatewayTokens)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/gateways/{gatewayID}/tokens", rbac.GatewayTokenManage, ctrl.RotateGatewayToken)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/gateways/{gatewayID}/tokens/{tokenID}", rbac.GatewayTokenManage, ctrl.RevokeGatewayToken)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/gateways/status", rbac.GatewayRead, ctrl.GetGatewayStatus)
+func RegisterGatewayRoutes(rr *middleware.RouteRegistrar, ctrl controllers.GatewayController) {
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/gateways", rbac.GatewayCreate, ctrl.RegisterGateway)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/gateways", rbac.GatewayRead, ctrl.ListGateways)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/gateways/{gatewayID}", rbac.GatewayRead, ctrl.GetGateway)
+	rr.HandleFuncWithValidationAndAuthz("PUT /orgs/{orgName}/gateways/{gatewayID}", rbac.GatewayUpdate, ctrl.UpdateGateway)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/gateways/{gatewayID}", rbac.GatewayDelete, ctrl.DeleteGateway)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/gateways/{gatewayID}/environments/{envID}", rbac.GatewayUpdate, ctrl.AssignGatewayToEnvironment)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/gateways/{gatewayID}/environments/{envID}", rbac.GatewayUpdate, ctrl.RemoveGatewayFromEnvironment)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/gateways/{gatewayID}/environments", rbac.GatewayRead, ctrl.GetGatewayEnvironments)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/gateways/{gatewayID}/health", rbac.GatewayRead, ctrl.CheckGatewayHealth)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/gateways/{gatewayID}/tokens", rbac.GatewayTokenManage, ctrl.ListGatewayTokens)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/gateways/{gatewayID}/tokens", rbac.GatewayTokenManage, ctrl.RotateGatewayToken)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/gateways/{gatewayID}/tokens/{tokenID}", rbac.GatewayTokenManage, ctrl.RevokeGatewayToken)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/gateways/status", rbac.GatewayRead, ctrl.GetGatewayStatus)
 }

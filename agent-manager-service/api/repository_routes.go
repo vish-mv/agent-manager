@@ -17,14 +17,12 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/rbac"
 )
 
-func registerRepositoryRoutes(mux *http.ServeMux, ctrl controllers.RepositoryController) {
-	mux.HandleFunc("POST /repositories/branches", middleware.RequirePermission(rbac.RepositoryRead)(ctrl.ListBranches))
-	mux.HandleFunc("POST /repositories/commits", middleware.RequirePermission(rbac.RepositoryRead)(ctrl.ListCommits))
+func registerRepositoryRoutes(rr *middleware.RouteRegistrar, ctrl controllers.RepositoryController) {
+	rr.HandleFuncWithValidationAndAuthz("POST /repositories/branches", rbac.RepositoryRead, ctrl.ListBranches)
+	rr.HandleFuncWithValidationAndAuthz("POST /repositories/commits", rbac.RepositoryRead, ctrl.ListCommits)
 }

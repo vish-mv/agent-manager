@@ -47,6 +47,35 @@ func NewResolverForbiddenError(msg string) *ResolverError {
 	return &ResolverError{StatusCode: http.StatusForbidden, Message: msg}
 }
 
+// RequireOrgMatch returns a middleware that:
+//  1. Verifies the token's ouHandle matches {orgName} in the path (fails closed —
+//     tokens without ouHandle are denied).
+//  2. Resolves orgName → Thunder OU ID via resolver.
+//  3. Injects ResolvedOrg{Name, OUID} into the request context for handlers to use.
+func RequireOrgMatch(resolver OrgResolver) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			claims := jwtassertion.GetTokenClaims(r.Context())
+			if claims == nil {
+				utils.WriteErrorResponse(w, http.StatusForbidden, "missing token claims")
+				return
+			}
+			orgName := r.PathValue(utils.PathParamOrgName)
+			if claims.OuHandle != orgName {
+				utils.WriteErrorResponse(w, http.StatusForbidden, "org identity mismatch")
+				return
+			}
+			ouID, err := resolver.ResolveOUID(r.Context(), orgName)
+			if err != nil {
+				utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to resolve organization")
+				return
+			}
+			ctx := WithResolvedOrg(r.Context(), ResolvedOrg{Name: orgName, OUID: ouID})
+			next(w, r.WithContext(ctx))
+		}
+	}
+}
+
 // RequirePermission returns a middleware that checks the request token carries the
 // required amp: scope. When RBAC_ENABLED=false the check is skipped entirely,
 // allowing zero-downtime rollout.

@@ -17,7 +17,6 @@
 package api
 
 import (
-	"net/http"
 
 	"github.com/wso2/agent-manager/agent-manager-service/controllers"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
@@ -25,11 +24,11 @@ import (
 )
 
 // RegisterLLMDeploymentRoutes registers all LLM deployment-related routes
-func RegisterLLMDeploymentRoutes(mux *http.ServeMux, ctrl controllers.LLMDeploymentController) {
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/llm-providers/{providerId}/deployments", rbac.LLMProviderDeploy, ctrl.DeployLLMProvider)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/llm-providers/{providerId}/deployments/undeploy", rbac.LLMProviderDeploy, ctrl.UndeployLLMProviderDeployment)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/llm-providers/{providerId}/deployments/restore", rbac.LLMProviderDeploy, ctrl.RestoreLLMProviderDeployment)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/llm-providers/{providerId}/deployments", rbac.LLMProviderRead, ctrl.GetLLMProviderDeployments)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "GET /orgs/{orgName}/llm-providers/{providerId}/deployments/{deploymentId}", rbac.LLMProviderRead, ctrl.GetLLMProviderDeployment)
-	middleware.HandleFuncWithValidationAndAuthz(mux, "DELETE /orgs/{orgName}/llm-providers/{providerId}/deployments/{deploymentId}", rbac.LLMProviderDeploy, ctrl.DeleteLLMProviderDeployment)
+func RegisterLLMDeploymentRoutes(rr *middleware.RouteRegistrar, ctrl controllers.LLMDeploymentController) {
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/llm-providers/{providerId}/deployments", rbac.LLMProviderDeploy, ctrl.DeployLLMProvider)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/llm-providers/{providerId}/deployments/undeploy", rbac.LLMProviderDeploy, ctrl.UndeployLLMProviderDeployment)
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/llm-providers/{providerId}/deployments/restore", rbac.LLMProviderDeploy, ctrl.RestoreLLMProviderDeployment)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/llm-providers/{providerId}/deployments", rbac.LLMProviderRead, ctrl.GetLLMProviderDeployments)
+	rr.HandleFuncWithValidationAndAuthz("GET /orgs/{orgName}/llm-providers/{providerId}/deployments/{deploymentId}", rbac.LLMProviderRead, ctrl.GetLLMProviderDeployment)
+	rr.HandleFuncWithValidationAndAuthz("DELETE /orgs/{orgName}/llm-providers/{providerId}/deployments/{deploymentId}", rbac.LLMProviderDeploy, ctrl.DeleteLLMProviderDeployment)
 }

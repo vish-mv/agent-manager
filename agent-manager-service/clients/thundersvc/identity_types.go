@@ -79,6 +79,7 @@ type UpdateUserRequest struct {
 // ThunderGroup represents a user group in Thunder.
 type ThunderGroup struct {
 	ID          string `json:"id"`
+	OuID        string `json:"ouId,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`

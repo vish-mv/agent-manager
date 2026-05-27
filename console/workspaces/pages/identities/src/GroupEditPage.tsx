@@ -161,12 +161,13 @@ export const GroupEditPage: React.FC = () => {
     setSaveSuccess(false);
     setIsSaving(true);
     try {
-      const deduped = pendingAdds.filter((u) => !allMemberIds.has(u.id));
-      for (const u of deduped) {
-        await addMembers({ params: { orgName: orgId, groupId }, body: { userIds: [u.id] } });
+      const idsToAdd = pendingAdds.filter((u) => !allMemberIds.has(u.id)).map((u) => u.id);
+      const idsToRemove = [...removedIds];
+      if (idsToAdd.length > 0) {
+        await addMembers({ params: { orgName: orgId, groupId }, body: { userIds: idsToAdd } });
       }
-      for (const id of removedIds) {
-        await removeMembers({ params: { orgName: orgId, groupId }, body: { userIds: [id] } });
+      if (idsToRemove.length > 0) {
+        await removeMembers({ params: { orgName: orgId, groupId }, body: { userIds: idsToRemove } });
       }
       setSaveSuccess(true);
       setPendingAdds([]);

@@ -25,8 +25,8 @@ import (
 )
 
 // registerAgentTokenRoutes registers the agent token API routes
-func registerAgentTokenRoutes(mux *http.ServeMux, ctrl controllers.AgentTokenController) {
-	middleware.HandleFuncWithValidationAndAuthz(mux, "POST /orgs/{orgName}/projects/{projName}/agents/{agentName}/token", rbac.AgentTokenManage, ctrl.GenerateToken)
+func registerAgentTokenRoutes(rr *middleware.RouteRegistrar, ctrl controllers.AgentTokenController) {
+	rr.HandleFuncWithValidationAndAuthz("POST /orgs/{orgName}/projects/{projName}/agents/{agentName}/token", rbac.AgentTokenManage, ctrl.GenerateToken)
 }
 
 // registerJWKSRoute registers the JWKS endpoint on the provided mux
