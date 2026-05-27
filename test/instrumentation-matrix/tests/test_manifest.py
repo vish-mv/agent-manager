@@ -52,3 +52,24 @@ def test_expand_matrix_honours_known_provider_restriction():
     cells = expand_matrix(m)
     assert len(cells) == 1
     assert cells[0].provider_name == "manual"
+
+
+def test_instrumentation_version_carries_through_to_cell():
+    """ProviderEntry.instrumentation_versions[pver] flows into Cell."""
+    m = load_manifest(FIXTURE)
+    assert m.providers["traceloop"].instrumentation_versions == {"0.60.0": "0.2.1"}
+    cells = expand_matrix(m)
+    assert cells[0].instrumentation_version == "0.2.1"
+
+
+def test_instrumentation_version_is_none_when_unmapped():
+    """A provider with no instrumentationVersions yields cells with None."""
+    from harness.manifest import ProviderEntry
+
+    m = load_manifest(FIXTURE)
+    m.providers["manual"] = ProviderEntry(
+        name="manual", versions=["0.1.0"], contract_schema="v1"
+    )
+    m.frameworks[0].provider_restriction = "manual"
+    cells = expand_matrix(m)
+    assert cells[0].instrumentation_version is None

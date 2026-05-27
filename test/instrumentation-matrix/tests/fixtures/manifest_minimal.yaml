@@ -2,6 +2,8 @@ schemaVersion: 1
 providers:
   traceloop:
     versions: ["0.60.0"]
+    instrumentationVersions:
+      "0.60.0": "0.2.1"
     contractSchema: "v1"
 frameworks:
   - name: langchain

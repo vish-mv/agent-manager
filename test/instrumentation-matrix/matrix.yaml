@@ -3,6 +3,15 @@ schemaVersion: 1
 providers:
   traceloop:
     versions: ["0.60.0"]
+    # Maps traceloop_version → init-container instrumentation_version. The
+    # heavy tier resolves the image tag
+    # `amp-python-instrumentation-provider:<instr>-python<X.Y>` from this map.
+    # Keep entries here even when release-config.json drops a version — that
+    # catalog tracks what's actively shipped, not what the matrix tests. Run
+    # `make check-matrix-manifest` to enforce that this map covers everything
+    # release-config.json currently lists.
+    instrumentationVersions:
+      "0.60.0": "0.2.1"
     contractSchema: "v1"
 
   manual:

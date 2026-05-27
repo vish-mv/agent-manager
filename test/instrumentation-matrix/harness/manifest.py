@@ -18,6 +18,12 @@ class ProviderEntry:
     name: str
     versions: list[str]
     contract_schema: str
+    # Maps provider-version → init-container instrumentation_version. Used by
+    # the heavy tier to resolve the right `amp-python-instrumentation-provider`
+    # image tag. Optional and unset for providers that don't ship init
+    # containers (e.g., the `manual` provider) — those leave Cell.
+    # instrumentation_version as None.
+    instrumentation_versions: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -76,6 +82,10 @@ class Cell:
     python: str
     contract_schema: str
     extras: list[str] = field(default_factory=list)
+    # Init-container image version for the heavy tier, resolved from the
+    # provider's instrumentation_versions map. None when the provider doesn't
+    # ship init containers (manual provider) or when the mapping is absent.
+    instrumentation_version: Optional[str] = None
 
     @property
     def id(self) -> str:
@@ -93,6 +103,7 @@ def load_manifest(path: Path) -> Manifest:
             name=name,
             versions=p["versions"],
             contract_schema=p["contractSchema"],
+            instrumentation_versions=p.get("instrumentationVersions", {}) or {},
         )
         for name, p in raw["providers"].items()
     }
@@ -170,6 +181,9 @@ def expand_matrix(manifest: Manifest) -> list[Cell]:
                                 python=py,
                                 contract_schema=provider.contract_schema,
                                 extras=fw.extras,
+                                instrumentation_version=(
+                                    provider.instrumentation_versions.get(pver)
+                                ),
                             )
                         )
     return cells

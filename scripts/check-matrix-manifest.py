@@ -34,10 +34,14 @@ def main() -> int:
 
     mx_traceloop = set(mx["providers"]["traceloop"]["versions"])
     mx_pythons = set(mx["python"]["versions"])
+    mx_instr_map: dict[str, str] = (
+        mx["providers"]["traceloop"].get("instrumentationVersions") or {}
+    )
 
     missing: list[str] = []
     for entry in rc_entries:
         tl = entry["traceloop_version"]
+        instr = entry.get("instrumentation_version")
         if tl not in mx_traceloop:
             missing.append(
                 f"matrix.yaml.providers.traceloop.versions missing {tl} (baselined in release-config.json)"
@@ -47,6 +51,12 @@ def main() -> int:
                 missing.append(
                     f"matrix.yaml.python.versions missing {py} (baselined for traceloop {tl})"
                 )
+        if instr and mx_instr_map.get(tl) != instr:
+            actual = mx_instr_map.get(tl, "<unset>")
+            missing.append(
+                f"matrix.yaml.providers.traceloop.instrumentationVersions[{tl!r}] "
+                f"= {actual!r}; release-config.json says it should be {instr!r}"
+            )
 
     if missing:
         print("matrix.yaml does not cover release-config.json:", file=sys.stderr)
@@ -56,7 +66,8 @@ def main() -> int:
 
     print(
         f"matrix.yaml covers release-config.json "
-        f"(traceloop: {sorted(mx_traceloop)}, python: {sorted(mx_pythons)})"
+        f"(traceloop: {sorted(mx_traceloop)}, python: {sorted(mx_pythons)}, "
+        f"instrumentationVersions: {mx_instr_map})"
     )
     return 0
 
