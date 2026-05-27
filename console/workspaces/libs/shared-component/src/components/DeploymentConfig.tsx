@@ -103,8 +103,8 @@ export function DeploymentConfig({
   const [enableApiKeySecurity, setEnableApiKeySecurity] =
     useState<boolean>(true);
   const [corsEnabled, setCorsEnabled] = useState<boolean>(true);
-  const [corsAllowAll, setCorsAllowAll] = useState<boolean>(false);
-  const [corsOrigins, setCorsOrigins] = useState<string[]>(["http://localhost:3000"]);
+  const [corsAllowAll, setCorsAllowAll] = useState<boolean>(true);
+  const [corsOrigins, setCorsOrigins] = useState<string[]>(["*"]);
   const [corsMethods, setCorsMethods] = useState<string[]>(["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]);
   const [corsHeaders, setCorsHeaders] = useState<string[]>(["authorization", "Content-Type", "Origin", "X-API-Key"]);
   const [corsAllowCredentials, setCorsAllowCredentials] = useState<boolean>(false);

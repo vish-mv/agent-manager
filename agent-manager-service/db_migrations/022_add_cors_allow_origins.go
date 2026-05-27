@@ -26,7 +26,7 @@ var migration022 = migration{
 		addCORSConfig := `
 		ALTER TABLE agent_configs
 			ADD COLUMN IF NOT EXISTS cors_enabled             BOOLEAN NOT NULL DEFAULT true,
-			ADD COLUMN IF NOT EXISTS cors_allow_origins       JSONB   NOT NULL DEFAULT '["http://localhost:3000"]',
+			ADD COLUMN IF NOT EXISTS cors_allow_origins       JSONB   NOT NULL DEFAULT '["*"]',
 			ADD COLUMN IF NOT EXISTS cors_allow_methods       JSONB   NOT NULL DEFAULT '["GET","POST","PUT","DELETE","PATCH","OPTIONS"]',
 			ADD COLUMN IF NOT EXISTS cors_allow_headers       JSONB   NOT NULL DEFAULT '["authorization","Content-Type","Origin","X-API-Key"]',
 			ADD COLUMN IF NOT EXISTS cors_allow_credentials   BOOLEAN NOT NULL DEFAULT false;
