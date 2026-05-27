@@ -21,9 +21,11 @@ def poll_traces(deployed: DeployedAgent, timeout_s: int = 120) -> list[dict]:
     then return them as a flat list of span dicts (`name`, `kind`,
     `attributes`, `traceId`, `spanId`, `parentSpanId`, `resource`).
 
-    The polling window starts at deploy time and ends at `now + timeout_s`,
-    which is the same shape the e2e tests use. Empty result after timeout =
-    "no spans captured" — driver maps that to FailureCategory.NO_SPANS_CAPTURED.
+    The timeout window is anchored to *invocation time* of this function —
+    typically called immediately after the `/chat` POST returns 200, so in
+    practice "spans must land within `timeout_s` of when the agent finished
+    handling the request." Empty result after the window = "no spans
+    captured" — driver maps that to FailureCategory.NO_SPANS_CAPTURED.
     """
     raise NotImplementedError(
         "Heavy-tier observer poll is a scaffold. The query shape is "

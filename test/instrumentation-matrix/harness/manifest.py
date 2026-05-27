@@ -21,8 +21,8 @@ class ProviderEntry:
     # Maps provider-version → init-container instrumentation_version. Used by
     # the heavy tier to resolve the right `amp-python-instrumentation-provider`
     # image tag. Optional and unset for providers that don't ship init
-    # containers (e.g., the `manual` provider) — those leave Cell.
-    # instrumentation_version as None.
+    # containers (e.g., the `manual` provider) — those leave
+    # `Cell.instrumentation_version` as None.
     instrumentation_versions: dict[str, str] = field(default_factory=dict)
 
 

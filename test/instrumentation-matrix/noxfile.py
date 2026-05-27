@@ -114,8 +114,12 @@ def heavy(session):
     this session is just the launcher. See heavy/HEAVY-TIER-DEPLOY.md for
     the full contract.
     """
+    # Use the interpreter that's running nox itself — that's the matrix
+    # venv locally and the workflow's setup-python interpreter in CI. A bare
+    # `python` resolves to Python 2 on macOS and may not exist on minimal
+    # Ubuntu runners; either fails before reaching the env precheck.
     session.run(
-        "python",
+        sys.executable,
         "heavy/driver.py",
         external=True,
         env={"PYTHONPATH": str(HERE)},
@@ -132,25 +136,28 @@ def report(session):
 
     reports = HERE / "reports"
     cells_dir = reports / "cells"
+    heavy_dir = reports / "heavy"
     diffs_dir = reports / "diffs"
     contracts_dir = HERE / "contracts"
     reports.mkdir(parents=True, exist_ok=True)
     diffs_dir.mkdir(parents=True, exist_ok=True)
 
-    # When emission produced zero reports (matrix empty, all skipped, or — most
-    # commonly — the outer nox crashed before any cell ran), CI still wants a
-    # PR comment that makes the absence visible. Write a placeholder summary
-    # instead of failing the report job and silently leaving no comment.
     cell_files = sorted(cells_dir.glob("*.json")) if cells_dir.exists() else []
-    if not cell_files:
+    heavy_files = sorted(heavy_dir.glob("*.json")) if heavy_dir.exists() else []
+
+    # When neither tier produced reports (most commonly: the outer nox
+    # crashed before any cell ran), CI still wants a PR comment that makes
+    # the absence visible. Write a placeholder summary instead of failing
+    # the report job and silently leaving no comment.
+    if not cell_files and not heavy_files:
         (reports / "summary.md").write_text(
-            "## Instrumentation matrix — emission tier\n"
+            "## Instrumentation matrix\n"
             "\n"
             "No per-cell reports were produced. The emission job likely failed "
             "before any cell ran; check the workflow logs for the failing step.\n"
         )
         session.log(
-            f"no per-cell reports under {cells_dir}; "
+            f"no per-cell reports under {cells_dir} or {heavy_dir}; "
             f"wrote placeholder summary to {reports / 'summary.md'}"
         )
         return
@@ -169,10 +176,19 @@ def report(session):
         provider = PROVIDERS[cell.provider_name]
         cell_schema_id[cell.id] = provider.contract_schema_id()
 
-    summary = build_summary(cells_dir, default_cell_id=default_id)
-    (reports / "summary.md").write_text(summary)
+    sections: list[str] = []
+    if cell_files:
+        sections.append(
+            build_summary(cells_dir, default_cell_id=default_id, tier="emission")
+        )
+    if heavy_files:
+        sections.append(
+            build_summary(heavy_dir, default_cell_id=default_id, tier="heavy")
+        )
+    (reports / "summary.md").write_text("\n\n".join(sections))
 
-    for f in cells_dir.glob("*.json"):
+    # Triage diff pages are produced for every failing cell across both tiers.
+    for f in [*cells_dir.glob("*.json"), *heavy_dir.glob("*.json")]:
         r = load_cell_report(f)
         if r["result"] != "fail":
             continue

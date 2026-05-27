@@ -38,6 +38,14 @@ def test_summary_marks_default_cell(tmp_path):
     assert "default cell, required" in s
 
 
+def test_summary_uses_tier_label_in_header(tmp_path):
+    (tmp_path / "a.json").write_text(json.dumps(_report("a", "pass")))
+    emission = build_summary(tmp_path, default_cell_id="a")
+    heavy = build_summary(tmp_path, default_cell_id="a", tier="heavy")
+    assert "emission tier" in emission
+    assert "heavy tier" in heavy
+
+
 def test_summary_raises_on_unknown_result(tmp_path):
     (tmp_path / "a.json").write_text(
         json.dumps(_report("a", "skipped-known-broken"))

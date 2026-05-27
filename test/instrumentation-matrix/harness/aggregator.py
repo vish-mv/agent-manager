@@ -7,7 +7,14 @@ from pathlib import Path
 EMOJI = {"pass": "✅", "fail": "❌", "skipped": "⚠️"}
 
 
-def build_summary(reports_dir: Path, *, default_cell_id: str) -> str:
+def build_summary(
+    reports_dir: Path, *, default_cell_id: str, tier: str = "emission"
+) -> str:
+    """Render a per-tier Markdown table from a directory of per-cell reports.
+
+    `tier` is used in the section header so the same renderer produces both
+    the emission-tier and heavy-tier sections of summary.md.
+    """
     files = sorted(Path(reports_dir).glob("*.json"))
     rows: list[str] = []
     counts = {"pass": 0, "fail": 0, "skipped": 0}
@@ -27,7 +34,7 @@ def build_summary(reports_dir: Path, *, default_cell_id: str) -> str:
         marker = " (default cell, required)" if cell == default_cell_id else ""
         rows.append(f"| {EMOJI[result]} {cell} | {result} | {detail}{marker} |")
     body = [
-        "## Instrumentation matrix — emission tier",
+        f"## Instrumentation matrix — {tier} tier",
         "",
         "| Cell | Result | Detail |",
         "|---|---|---|",

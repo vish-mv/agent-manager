@@ -21,14 +21,39 @@ from harness.manifest import Cell, expand_matrix, load_manifest
 from harness.reports import CellResult, write_cell_report
 from harness.validator import ContractValidator
 from heavy import k3d
-from heavy.amp_client import AmpClient
+from heavy.amp_client import AmpClient, IdpCredentials
 from heavy.observer import poll_traces
 from providers import PROVIDERS
 
 HERE = Path(__file__).resolve().parent.parent
 
+REQUIRED_ENV = (
+    "AMP_API_BASE_URL",
+    "TRACES_OBSERVER_BASE_URL",
+    "IDP_TOKEN_URL",
+    "IDP_CLIENT_ID",
+    "IDP_CLIENT_SECRET",
+)
+
+
+def _require_env() -> None:
+    """Fail fast on missing AMP / IDP env vars, before any cluster wait.
+
+    A KeyError 25 minutes into `k3d.wait_ready()` is a terrible UX; this
+    precheck surfaces the missing var in under a second with a pointer at
+    the contract doc.
+    """
+    missing = [k for k in REQUIRED_ENV if k not in os.environ]
+    if missing:
+        raise SystemExit(
+            "heavy tier missing required env vars: "
+            f"{', '.join(missing)}. See heavy/HEAVY-TIER-DEPLOY.md."
+        )
+
 
 def main() -> int:
+    _require_env()
+
     m = load_manifest(HERE / "matrix.yaml")
     cells = select_heavy_subset(expand_matrix(m), m)
 
@@ -36,7 +61,11 @@ def main() -> int:
 
     client = AmpClient(
         base_url=os.environ["AMP_API_BASE_URL"],
-        admin_token=os.environ["AMP_ADMIN_TOKEN"],
+        idp=IdpCredentials(
+            token_url=os.environ["IDP_TOKEN_URL"],
+            client_id=os.environ["IDP_CLIENT_ID"],
+            client_secret=os.environ["IDP_CLIENT_SECRET"],
+        ),
     )
 
     reports_dir = HERE / "reports" / "heavy"
@@ -130,9 +159,8 @@ def _run_cell(cell: Cell, client: AmpClient) -> CellResult:
         return CellResult(
             cell_id=cell.id,
             result="fail",
-            # Heavy-tier schema failures are usually downstream of the
-            # observer's enrichment, not the provider — hence pipeline-error
-            # rather than schema-violation. See FailureCategory taxonomy.
+            # See FailureCategory.PIPELINE_ERROR docstring for why heavy-tier
+            # schema violations map here rather than to SCHEMA_VIOLATION.
             category="pipeline-error",
             skip_reason=None,
             durations={},

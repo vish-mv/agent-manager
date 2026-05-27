@@ -88,6 +88,26 @@ def test_multiple_entries_deduplicate():
     assert len(cells) == 1
 
 
+def test_field_map_keys_match_cell_attributes():
+    """Invariant guard: every _FIELD_MAP value must be a real Cell attribute.
+
+    Adding a new dimension to Cell without updating _FIELD_MAP would make
+    known-broken patterns silently fail to match the new field; this test
+    catches that drift without needing the field-name knowledge in two
+    places to stay in sync manually.
+    """
+    from dataclasses import fields
+
+    from harness.manifest import Cell
+    from harness.revalidate import _FIELD_MAP
+
+    cell_attrs = {f.name for f in fields(Cell)}
+    assert set(_FIELD_MAP.values()) <= cell_attrs, (
+        f"_FIELD_MAP references unknown Cell attrs: "
+        f"{set(_FIELD_MAP.values()) - cell_attrs}"
+    )
+
+
 def test_unmatched_known_broken_is_silently_empty():
     """A known-broken pointing at a cell the matrix no longer expands yields
     no cells — common after a matrix.yaml prune. revalidate-known-broken's

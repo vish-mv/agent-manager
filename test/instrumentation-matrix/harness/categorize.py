@@ -26,8 +26,13 @@ class FailureCategory(str, Enum):
     SAMPLE_IMPORT_FAILURE = "sample-import-failure"
     NO_SPANS_CAPTURED = "no-spans-captured"
     MISSING_SPAN_KIND = "missing-span-kind"
-    SCHEMA_VIOLATION = "schema-violation"
+    SCHEMA_VIOLATION = "schema-violation"  # emission tier — provider emits wrong shape
     CASSETTE_MISS = "cassette-miss"
+    # Heavy-tier-specific: by the time spans reach the observer they've been
+    # through the enrichment pipeline, so a contract failure on those spans
+    # is more likely a pipeline/observer issue than a provider bug. The
+    # heavy driver maps schema violations to this category, not to
+    # SCHEMA_VIOLATION, to preserve that distinction in triage.
     PIPELINE_ERROR = "pipeline-error"
     INFRA_ERROR = "infra-error"
     UNKNOWN = "unknown"

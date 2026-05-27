@@ -26,17 +26,43 @@ heavy-tier Python driver mirrors that flow via `heavy.amp_client.AmpClient`.
 
 ## Required environment variables
 
+AMP authenticates via Thunder IDP using the OAuth2 `client_credentials`
+grant — there is no static admin token. The driver fetches a short-lived
+access token at startup and refreshes as needed, mirroring
+`test/e2e/framework/auth.go::FetchToken`.
+
 | Variable | Source | Purpose |
 |---|---|---|
-| `AMP_API_BASE_URL` | snapshot workflow output | cluster-local URL of agent-manager-service, e.g. `http://agent-manager-service.amp.svc.cluster.local:8080` |
-| `AMP_ADMIN_TOKEN` | minted by snapshot bootstrap | admin token authorised to create orgs/projects/agents |
+| `AMP_API_BASE_URL` | snapshot workflow output | cluster-local URL of agent-manager-service, e.g. `http://agent-manager-service.default.svc.cluster.local:8080` |
+| `TRACES_OBSERVER_BASE_URL` | snapshot workflow output | URL the driver polls — e.g. `http://traces-observer-service.default.svc.cluster.local:9098` |
+| `IDP_TOKEN_URL` | constant per cluster | Thunder OAuth2 token endpoint, e.g. `http://thunder.amp.localhost:8080/oauth2/token` |
+| `IDP_CLIENT_ID` | repo secret / cluster config | OAuth2 client ID (local-dev default: `amp-api-client`) |
+| `IDP_CLIENT_SECRET` | repo secret / cluster config | OAuth2 client secret (local-dev default: `amp-api-client-secret`) |
 | `OPENAI_API_KEY` | repo secret | real key — the deployed agent makes real LLM calls; cassettes are emission-tier only |
 | `ANTHROPIC_API_KEY` | repo secret | as above, for anthropic-direct heavy cells |
 
-The two AMP variables are required; the driver fails fast if either is
-unset. LLM keys are required per the cells that need them (the driver
-deploys only cells whose providers actually issue HTTP calls — i.e., it
-skips manual cells, which run emission-only).
+All five AMP / IDP variables are required; `main()` fails fast in under a
+second if any is unset, before the cluster wait kicks in. LLM keys are
+required per the cells that need them (the driver deploys only cells whose
+providers actually issue HTTP calls — i.e., it skips manual cells, which
+run emission-only).
+
+### Token fetch sequence
+
+```
+POST <IDP_TOKEN_URL>
+  Authorization: Basic <base64(IDP_CLIENT_ID:IDP_CLIENT_SECRET)>
+  Content-Type: application/x-www-form-urlencoded
+
+  grant_type=client_credentials
+
+→ 200 { "access_token": "...", "token_type": "Bearer", "expires_in": 3600 }
+```
+
+The access token goes into the `Authorization: Bearer <token>` header on
+every subsequent call to `agent-manager-service`. Tokens expire — the
+client refreshes proactively if `expires_in - elapsed < 30s`, again
+mirroring the e2e Go reference.
 
 ## Deploy flow (per cell)
 
