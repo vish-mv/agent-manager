@@ -17,7 +17,7 @@
 package observer
 
 import (
-	"github.com/wso2/ai-agent-management-platform/traces-observer-service/opensearch"
+	"github.com/wso2/agent-manager/traces-observer-service/opensearch"
 )
 
 // componentUIDResourceKey is the resource attribute key used by OpenChoreo to
