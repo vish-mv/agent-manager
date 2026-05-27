@@ -171,12 +171,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /tmp/amp-snapshot
-          if gh run download \
-              --repo ${{ github.repository }} \
+          # `gh run download` has no --workflow flag; resolve the latest
+          # successful snapshot run id first, then download by id.
+          run_id=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow heavy-tier-snapshot.yaml \
+            --status success -L 1 \
+            --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ] && gh run download "$run_id" \
+              --repo "${{ github.repository }}" \
               --name amp-heavy-snapshot \
-              --dir /tmp/amp-snapshot \
-              -w heavy-tier-snapshot.yaml 2>/dev/null; then
-            echo "snapshot restored"
+              --dir /tmp/amp-snapshot; then
+            echo "snapshot restored from run $run_id"
           else
             echo "::warning::no heavy-tier snapshot available; heavy tier will fail"
           fi

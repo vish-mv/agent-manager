@@ -25,10 +25,18 @@ from harness.manifest import expand_matrix, load_manifest  # noqa: E402
 
 
 def _split(value: str) -> set[str] | None:
-    """`"all"` returns None (match everything); else parse the CSV."""
-    if value.strip().lower() == "all":
+    """Parse a comma-separated filter into a set, or return None for
+    match-everything.
+
+    Treats empty input and any token equal to `all` (case-insensitive) as
+    "match everything" — that way an operator who types `all,langchain`
+    intending the union doesn't accidentally restrict to just `langchain`,
+    and a blank input doesn't silently match nothing.
+    """
+    tokens = {v.strip() for v in value.split(",") if v.strip()}
+    if not tokens or any(t.lower() == "all" for t in tokens):
         return None
-    return {v.strip() for v in value.split(",") if v.strip()}
+    return tokens
 
 
 def main() -> int:

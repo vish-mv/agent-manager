@@ -6,12 +6,15 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
+
+from harness.manifest import Manifest, expand_matrix
 
 EMOJI = {"pass": "✅", "fail": "❌", "skipped": "⚠️"}
 
 # Pulls the provider_version segment out of a cell id like
-# `traceloop-0.60.0-langchain-0.3.27-py3.11`.
+# `traceloop-0.60.0-langchain-0.3.27-py3.11`. Fallback only — prefer
+# manifest lookup when a Manifest is passed to collect_metrics.
 _PROVIDER_VERSION_RE = re.compile(r"^[^-]+-([0-9][^-]*)-")
 
 
@@ -55,16 +58,40 @@ def build_summary(
     return "\n".join(body)
 
 
-def collect_metrics(reports_dir: Path) -> dict[str, Any]:
-    """Walk per-cell reports and return counts, category histogram, and a
-    likely-cause string for the nightly Chat alert.
+def collect_metrics(
+    reports_dirs: Path | Iterable[Path],
+    *,
+    manifest: Manifest | None = None,
+) -> dict[str, Any]:
+    """Walk per-cell reports (one tier or several) and return counts, category
+    histogram, and a likely-cause string for the nightly Chat alert.
+
+    `reports_dirs` accepts a single Path (back-compat) or an iterable — the
+    nightly passes `[reports/cells, reports/heavy]` so heavy-tier failures
+    contribute to `has_failures` and surface in the Chat alert per design
+    §12.4.
+
+    `manifest` is optional. When provided, framework names are looked up
+    from the expanded cell list rather than re-parsed from the cell id —
+    that's the only fully-correct approach because cell ids with numeric
+    framework-name segments (e.g. `gpt-4-...`) confuse the regex parser.
+    The parser is kept as a fallback for callers that don't have the
+    manifest handy.
 
     Heuristic (design §12.2): if every failure shares a `(provider, version)`
     and the failures span more than one framework, that's almost always a
     provider-version regression. If every failure shares the same violation
     `path`, that's a schema/observer regression. Otherwise None.
     """
-    files = sorted(Path(reports_dir).glob("*.json"))
+    if isinstance(reports_dirs, Path):
+        dirs = [reports_dirs]
+    else:
+        dirs = list(reports_dirs)
+
+    files: list[Path] = []
+    for d in dirs:
+        files.extend(sorted(d.glob("*.json")) if d.exists() else [])
+
     counts: dict[str, int] = {"pass": 0, "fail": 0, "skipped": 0}
     categories: Counter[str] = Counter()
     failed: list[dict] = []
@@ -80,14 +107,27 @@ def collect_metrics(reports_dir: Path) -> dict[str, Any]:
             if r.get("category"):
                 categories[r["category"]] += 1
 
+    cell_framework = _framework_index(manifest) if manifest else {}
+
     return {
         "counts": counts,
         "categories": dict(categories),
-        "likely_cause": _likely_cause(failed),
+        "likely_cause": _likely_cause(failed, cell_framework),
     }
 
 
-def _likely_cause(failed: list[dict]) -> str | None:
+def _framework_index(manifest: Manifest) -> dict[str, str]:
+    return {cell.id: cell.framework_name for cell in expand_matrix(manifest)}
+
+
+def _framework_of(cell_id: str, cell_framework: dict[str, str]) -> str | None:
+    """Manifest-first lookup; regex parse as fallback for unknown ids."""
+    if cell_id in cell_framework:
+        return cell_framework[cell_id]
+    return _extract_framework(cell_id)
+
+
+def _likely_cause(failed: list[dict], cell_framework: dict[str, str]) -> str | None:
     if len(failed) < 2:
         return None
 
@@ -95,7 +135,7 @@ def _likely_cause(failed: list[dict]) -> str | None:
     pvs = {_extract_provider_version(r["cellId"]) for r in failed}
     pvs.discard(None)
     if len(pvs) == 1:
-        frameworks = {_extract_framework(r["cellId"]) for r in failed}
+        frameworks = {_framework_of(r["cellId"], cell_framework) for r in failed}
         frameworks.discard(None)
         pv = next(iter(pvs))
         if len(frameworks) > 1:

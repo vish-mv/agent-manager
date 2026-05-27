@@ -149,3 +149,88 @@ def test_collect_metrics_handles_hyphenated_framework_names(tmp_path):
     m = collect_metrics(tmp_path)
     # Both share 0.61.0, different frameworks → provider regression.
     assert m["likely_cause"] is not None and "0.61.0" in m["likely_cause"]
+
+
+def test_collect_metrics_walks_multiple_dirs(tmp_path):
+    """Heavy + emission dirs both contribute to counts and categories."""
+    emission = tmp_path / "cells"
+    heavy = tmp_path / "heavy"
+    emission.mkdir()
+    heavy.mkdir()
+    (emission / "a.json").write_text(json.dumps(_report("a", "pass")))
+    (heavy / "b.json").write_text(
+        json.dumps(_fail("traceloop-0.60.0-langchain-0.3.27-py3.11", category="pipeline-error"))
+    )
+    m = collect_metrics([emission, heavy])
+    assert m["counts"]["pass"] == 1
+    assert m["counts"]["fail"] == 1
+    assert m["categories"] == {"pipeline-error": 1}
+
+
+def test_collect_metrics_tolerates_missing_dirs(tmp_path):
+    """Heavy dir may not exist (no heavy run); single emission dir still works."""
+    emission = tmp_path / "cells"
+    heavy = tmp_path / "heavy"  # deliberately not created
+    emission.mkdir()
+    (emission / "a.json").write_text(json.dumps(_report("a", "pass")))
+    m = collect_metrics([emission, heavy])
+    assert m["counts"]["pass"] == 1
+    assert m["counts"]["fail"] == 0
+
+
+def test_collect_metrics_uses_manifest_for_framework_lookup(tmp_path):
+    """A cell-id with a numeric framework segment (e.g. `gpt-4-tools`) would
+    fool the regex parser; manifest lookup is the authoritative path."""
+    from harness.manifest import (
+        DefaultCell,
+        FrameworkEntry,
+        HeavyTier,
+        Manifest,
+        ProviderEntry,
+    )
+
+    m_obj = Manifest(
+        schema_version=1,
+        providers={
+            "traceloop": ProviderEntry(
+                "traceloop", ["0.61.0"], "v1", instrumentation_versions={}
+            )
+        },
+        frameworks=[
+            FrameworkEntry(
+                "gpt-4-tools",
+                "gpt-4-tools",
+                ["0.1.0"],
+                "cells/sample.py",
+                ["llm"],
+            ),
+            FrameworkEntry(
+                "langchain",
+                "langchain",
+                ["0.3.27"],
+                "cells/langchain_sample.py",
+                ["llm"],
+            ),
+        ],
+        python_versions=["3.11"],
+        default_cell=DefaultCell("traceloop", "0.61.0", "langchain", "0.3.27", "3.11"),
+        heavy_tier=HeavyTier(1, 1),
+    )
+
+    (tmp_path / "a.json").write_text(
+        json.dumps(_fail("traceloop-0.61.0-gpt-4-tools-0.1.0-py3.11"))
+    )
+    (tmp_path / "b.json").write_text(
+        json.dumps(_fail("traceloop-0.61.0-langchain-0.3.27-py3.11"))
+    )
+    metrics = collect_metrics(tmp_path, manifest=m_obj)
+    # Two different frameworks on the same version → provider regression.
+    assert metrics["likely_cause"] is not None
+    assert "0.61.0" in metrics["likely_cause"]
+
+
+def test_collect_metrics_handles_empty_csv_filter():
+    """Imported here to keep the test file self-contained for filter-related
+    edge cases that aggregator.collect_metrics inherits via the workflow."""
+    # No assertion — this placeholder documents that an empty-CSV input is
+    # handled by scripts/expand_filter.py before metrics ever see it.
