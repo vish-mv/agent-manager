@@ -100,6 +100,29 @@ def emission(session, cell):
 
 
 @nox.session(python=False)
+def heavy(session):
+    """Run the heavy tier against a restored k3d cluster.
+
+    Pre-conditions (caller's responsibility — set up by the nightly /
+    manual workflows in Phase 8):
+    - k3d cluster `openchoreo-local-setup` is up with the snapshot restored.
+    - AMP_API_BASE_URL points at the in-cluster agent-manager-service.
+    - AMP_ADMIN_TOKEN is set.
+    - OPENAI_API_KEY / ANTHROPIC_API_KEY are set for cells that need them.
+
+    Session-level pre-conditions are checked by heavy/driver.py itself;
+    this session is just the launcher. See heavy/HEAVY-TIER-DEPLOY.md for
+    the full contract.
+    """
+    session.run(
+        "python",
+        "heavy/driver.py",
+        external=True,
+        env={"PYTHONPATH": str(HERE)},
+    )
+
+
+@nox.session(python=False)
 def report(session):
     """Aggregate per-cell reports into a summary + triage page set."""
     from harness.aggregator import build_summary
