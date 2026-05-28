@@ -83,3 +83,17 @@ def test_subset_uses_default_python_only():
     cells = expand_matrix(m)
     sub = select_heavy_subset(cells, m)
     assert all(c.python == "3.11" for c in sub)
+
+
+def test_per_tl_axis_pins_default_framework_version():
+    """If the default framework has multiple versions, the per-traceloop axis
+    must pick only the default version — one cell per provider version, not
+    one per (provider_version × framework_version)."""
+    m = _multi_manifest()
+    m.frameworks[0].versions = ["0.3.27", "0.4.0"]  # langchain (the default fw)
+    cells = expand_matrix(m)
+    sub = select_heavy_subset(cells, m)
+    langchain = [c for c in sub if c.framework_name == "langchain"]
+    # 2 traceloop versions × the single default framework_version = 2 cells.
+    assert {c.framework_version for c in langchain} == {"0.3.27"}
+    assert {c.provider_version for c in langchain} == {"0.60.0", "0.61.0"}

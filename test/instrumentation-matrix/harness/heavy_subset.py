@@ -22,13 +22,15 @@ from harness.manifest import Cell, Manifest
 def select_heavy_subset(cells: list[Cell], manifest: Manifest) -> list[Cell]:
     default = manifest.default_cell
 
-    # Per-traceloop axis: each version of the default provider, on the
-    # default framework + python.
+    # Per-traceloop axis: each version of the default provider, pinned to the
+    # default framework + framework_version + python so it's exactly one cell
+    # per provider version (not one per framework_version too).
     per_tl = [
         c
         for c in cells
         if c.provider_name == default.provider
         and c.framework_name == default.framework
+        and c.framework_version == default.framework_version
         and c.python == default.python
     ]
 
