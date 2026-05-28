@@ -1,6 +1,6 @@
 """Heavy-tier driver.
 
-Picks the heavy-tier subset, deploys each cell against the snapshot cluster
+Picks the heavy-tier subset, deploys each cell against the live AMP stack
 via agent-manager-service's REST API, invokes the agent, polls
 traces-observer-service for the resulting spans, validates against the
 contract, and writes a per-cell report. Failures fall into the same
@@ -43,9 +43,13 @@ HERE = Path(__file__).resolve().parent.parent
 # They're env-overridable but never required as secrets — the only real
 # secrets are the LLM keys, which are forwarded into the deployed agent.
 _DEFAULTS = {
+    # The dev `make setup` bring-up port-forwards these to localhost:
+    # API 9000 (compose 9000:8080), traces-observer 9098, Thunder IDP 8090.
+    # (The quick-start/e2e topology routes Thunder via thunder.amp.localhost
+    # :8080 with a Host-header trick — that's NOT what the heavy tier uses.)
     "AMP_API_BASE_URL": "http://localhost:9000",
     "TRACES_OBSERVER_BASE_URL": "http://localhost:9098",
-    "IDP_TOKEN_URL": "http://thunder.amp.localhost:8080/oauth2/token",
+    "IDP_TOKEN_URL": "http://localhost:8090/oauth2/token",
     "IDP_CLIENT_ID": "amp-api-client",
     "IDP_CLIENT_SECRET": "amp-api-client-secret",
 }
@@ -192,22 +196,26 @@ def _run_cell(
 
 
 def _invoke_agent(deployed: DeployedAgent) -> None:
-    """POST a fixed prompt to the deployed agent's endpoint to drive trace
-    emission. Auth is the `X-API-Key` header (mirrors
-    test/e2e/operations/agent/invoke_agent.go). Retries through the
-    post-deploy warm-up window where the endpoint may briefly 503/502.
+    """POST a fixed prompt to the deployed agent's `/chat` endpoint to drive
+    trace emission. Auth is the `X-API-Key` header. Retries through the
+    post-deploy warm-up window where the endpoint can briefly 502/503/401
+    (API-key propagation to the gateway lags the mint call) — mirrors
+    test/e2e/operations/agent/invoke_agent.go.
 
-    The body is the AMP chat shape (`{"messages": [{"role","content"}]}`).
-    A single-turn prompt is enough — every cell sample bottoms out in one
-    LLM call, which is what we need a span for.
+    Body + path match the deployed sample (samples/customer-support-agent):
+    `POST <endpoint>/chat {"session_id", "message"}`. A single-turn prompt is
+    enough — every cell sample bottoms out in one LLM call, which is the span
+    we need.
     """
-    body = {"messages": [{"role": "user", "content": "Answer in one word: capital of France?"}]}
+    url = deployed.endpoint_url.rstrip("/") + "/chat"
+    body = {"session_id": f"matrix-{deployed.agent_name}",
+            "message": "Answer in one word: capital of France?"}
     deadline = time.monotonic() + 180
     last = ""
     while time.monotonic() < deadline:
         try:
             resp = requests.post(
-                deployed.endpoint_url,
+                url,
                 json=body,
                 headers={"X-API-Key": deployed.api_key},
                 timeout=60,
@@ -216,7 +224,7 @@ def _invoke_agent(deployed: DeployedAgent) -> None:
             last = str(e)
             time.sleep(5)
             continue
-        if resp.status_code in (502, 503):  # warming up
+        if resp.status_code in (401, 502, 503):  # warming up / key not propagated
             last = f"{resp.status_code}"
             time.sleep(5)
             continue

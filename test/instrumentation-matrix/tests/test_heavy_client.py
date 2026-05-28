@@ -62,7 +62,8 @@ def _mock_happy_deploy(org="default", name="traceloop-0-60-0-langchain-0-3-27-py
     responses.add(responses.POST, f"{BASE}{a}/deployments", json={}, status=202)
     responses.add(
         responses.GET, f"{BASE}{a}/deployments",
-        json={"default": {"status": "active", "endpoints": [{"url": "http://agent.test/chat"}]}},
+        # endpoint is the agent's base URL; the driver appends /chat at invoke.
+        json={"default": {"status": "active", "endpoints": [{"url": "http://agent.test"}]}},
         status=200,
     )
     responses.add(responses.POST, f"{BASE}{a}/environments/default/api-keys", json={"apiKey": "key-xyz"}, status=201)
@@ -80,7 +81,7 @@ def test_deploy_agent_happy_path():
         framework_version="0.3.27",
         python_version="3.11",
     )
-    assert d.endpoint_url == "http://agent.test/chat"
+    assert d.endpoint_url == "http://agent.test"
     assert d.api_key == "key-xyz"
     assert d.image_id == "img-9"
     assert d.agent_name == name

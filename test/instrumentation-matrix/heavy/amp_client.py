@@ -1,5 +1,5 @@
 """Client for agent-manager-service REST API — used by the heavy-tier driver
-to provision an agent per cell against the snapshot cluster.
+to provision an agent per cell against the live AMP stack.
 
 The flow mirrors the Go e2e suite (`test/e2e/framework/` +
 `test/e2e/operations/`), which is the authoritative reference for the real
@@ -15,15 +15,16 @@ endpoints and payloads:
   7. POST mint API key                                          (agent/agent_apikey.go)
 
 NOTE: this is implemented against the e2e Go reference but has not yet run
-against a live AMP stack (no heavy-tier snapshot exists). Treat the timing
-constants and the namespace/component mapping in heavy/observer.py as
-first-run-tunable. The heavy job is `continue-on-error: true` in CI until a
-real run validates this end to end.
+against a live AMP stack. Treat the timing constants, the IDP/observer URLs,
+and the namespace/component mapping in heavy/observer.py as first-run-
+tunable. The heavy job is `continue-on-error: true` in CI until a real run
+validates this end to end.
 """
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -43,6 +44,12 @@ def _safe_name(cell_id: str) -> str:
     for ch in cell_id.lower():
         out.append(ch if (ch.isalnum() or ch == "-") else "-")
     return "".join(out).strip("-")
+
+
+def _utc_rfc3339(*, hours_from_now: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(hours=hours_from_now)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 @dataclass
@@ -265,6 +272,10 @@ class AmpClient:
         )
 
     def _wait_for_active_endpoint(self, org: str, name: str) -> str:
+        # FIRST-RUN-TUNABLE: reads the endpoint URL from the deployments
+        # response (`endpoints[].url`). The e2e suite instead reads it from
+        # GET .../endpoints?environment=<env> — if the deployments payload
+        # turns out not to carry the URL, switch to that endpoint here.
         path = f"/api/v1/orgs/{org}/projects/{name}/agents/{name}/deployments"
         deadline = time.monotonic() + _DEPLOY_TIMEOUT_S
         while time.monotonic() < deadline:
@@ -281,11 +292,14 @@ class AmpClient:
         )
 
     def _mint_api_key(self, org: str, name: str) -> str:
+        # expiresAt must be a concrete RFC3339 timestamp (the e2e suite sends
+        # now+24h); an empty string can be rejected by validation.
+        expires_at = _utc_rfc3339(hours_from_now=24)
         resp = self._request(
             "POST",
             f"/api/v1/orgs/{org}/projects/{name}/agents/{name}"
             f"/environments/{self.environment}/api-keys",
-            json={"displayName": f"matrix-{name}", "expiresAt": ""},
+            json={"displayName": f"matrix-{name}", "expiresAt": expires_at},
             expect=(201,),
         )
         return resp.json()["apiKey"]

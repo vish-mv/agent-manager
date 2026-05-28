@@ -24,7 +24,7 @@ on:
         required: false
         default: 'all'
       include_heavy_tier:
-        description: 'Also run the heavy-tier subset against the snapshot'
+        description: 'Also run the heavy-tier subset against a built-from-source AMP stack'
         type: boolean
         default: false
       include_record_mode:

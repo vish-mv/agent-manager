@@ -289,8 +289,12 @@ first-run-tunable:
 
 1. **The `amp-dev-stack` bring-up** — the `make setup` chain hasn't run on a
    CI runner; watch `setup-platform.sh`'s Node check, the (unneeded) console
-   in docker-compose, and the background port-forwards binding 9000/9098.
-2. **Timing constants** (build 600s, deploy 300s).
+   in docker-compose, and the port-forwards exposing the API (`:9000`),
+   traces-observer (`:9098`), and Thunder IDP (`:8090`).
+2. **Endpoints the driver assumes** — IDP token URL (`localhost:8090`), the
+   agent's `/chat` route + `{session_id, message}` body, and reading the
+   endpoint URL from the deployments response (the e2e suite reads it from
+   `/endpoints`). Timing constants (build 600s, deploy 300s) too.
 3. **The observer `/spans` param names** — `poll_traces` sends both
    `organization`/`project`/`agent` and best-effort `namespace`/`component`;
    confirm the right mapping on a live observer.
