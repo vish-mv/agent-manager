@@ -99,6 +99,7 @@ const sidebars: SidebarsConfig = {
         'tutorials/register-ai-gateway',
         'tutorials/register-llm-service-provider',
         'tutorials/secure-agent-endpoints-with-api-keys',
+        'tutorials/configure-cors-for-agent-endpoints',
         'tutorials/configure-agent-llm-configuration'
       ],
     },
