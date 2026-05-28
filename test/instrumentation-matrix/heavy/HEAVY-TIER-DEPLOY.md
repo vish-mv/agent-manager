@@ -91,26 +91,32 @@ for cell in heavy_subset:
     write_cell_report(...)
 ```
 
-The cell records `(namespace, component, environment)` on the `DeployedAgent`
-record at deploy time so the observer poll can form a valid
-`GET /api/v1/traces` query without re-discovery.
+The `DeployedAgent` record carries `(org, project_name, agent_name,
+environment)` so the observer poll can form its query without re-discovery.
 
 ## Observer query shape
 
-`GET /api/v1/traces` requires:
+Span fetch is three calls (mirrors `test/e2e/operations/trace/`):
 
 ```
-?namespace=<ns>
-&project=<project>
-&component=<component>
-&environment=<environment>
-&startTime=<RFC 3339>
-&endTime=<RFC 3339>
+# 1. list traces for the agent
+GET /api/v1/traces?organization=&project=&agent=&environment=&startTime=&endTime=&limit=&sortOrder=desc
+
+# 2. list span summaries (spanIds) for each trace
+GET /api/v1/traces/{traceId}/spans?...
+
+# 3. fetch each span's detail (carries name/kind/attributes/resource)
+GET /api/v1/traces/{traceId}/spans/{spanId}
 ```
 
-(verified against `traces-observer-service/handlers/handlers.go`). The
-driver records `startTime` at deploy time and uses `now()` for `endTime` on
-each poll.
+The list call uses `organization`/`project`/`agent`/`environment` (the names
+the e2e `ListTraces` client uses). The per-trace `/spans` call's exact param
+names (`namespace`/`component` vs `organization`/`agent`) are first-run-
+tunable — see "Implementation status". Step 3 returns `opensearch.Span`,
+whose raw `attributes` map is exactly what the emission-tier validator
+consumes, so the heavy tier reuses the `traceloop/v1` contract. The driver
+anchors the time window to invocation time, widened ±5m for clock skew +
+indexing lag.
 
 ## Timeout budget
 
@@ -126,12 +132,24 @@ Total per-cell wall time is bounded by ~7 min in the worst case; the heavy
 subset is currently 1–4 cells, so the whole tier fits inside a single
 ubuntu-latest 60-minute budget.
 
-## When this gets implemented
+## Implementation status
 
-The function bodies in `heavy/amp_client.py` and `heavy/observer.py` raise
-`NotImplementedError` today. They get filled in once the snapshot workflow
-(Task 40) publishes its first artifact and the nightly workflow (Phase 8)
-has something to dispatch against. Until then, `nox -s heavy` is dispatch-
-able but will surface the NotImplementedError immediately — that's
-intentional, since trying to land an unvalidated full implementation would
-just rot.
+`heavy/amp_client.py`, `heavy/observer.py`, and `driver._invoke_agent` are
+**implemented** against the Go e2e reference (`test/e2e/framework/` +
+`test/e2e/operations/`) — token fetch, project/agent create with
+`instrumentationVersion`, build poll, deploy poll, API-key mint, `/chat`
+invoke, and the list→summaries→detail span fetch. Mocked-HTTP unit tests
+cover the control flow (`tests/test_heavy_client.py`).
+
+They have **not** run against a live AMP stack — no heavy-tier snapshot
+exists yet — so two things are first-run-tunable:
+
+1. **Timing constants** (build 600s, deploy 300s) — adjust to real
+   cold-snapshot build times.
+2. **The observer summaries-endpoint params.** `poll_traces` sends both the
+   list-traces names (`organization`/`project`/`agent`) and best-effort
+   `namespace`/`component` on the per-trace `/spans` call; the exact mapping
+   needs confirming against a live observer.
+
+The heavy CI jobs stay `continue-on-error: true` until a real run validates
+this end to end — then drop that flag.

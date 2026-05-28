@@ -18,7 +18,8 @@ emit spans the observer can parse" — across the combinations declared in
   JSON-schema contract.
 - **Heavy tier** (nightly / on-demand): deploys a representative subset of
   cells against a real AMP stack on k3d and validates the spans that survive
-  the full pipeline. (The heavy-tier driver bodies are scaffolded; see §7.)
+  the full pipeline. (Heavy-tier deploy/poll is implemented but not yet
+  validated against a live stack; see §7.)
 
 It is **not** a correctness test of the agents themselves, a load test, or a
 console/UI test — it asserts the *shape* of emitted telemetry, nothing more.
@@ -160,10 +161,13 @@ agent-manager-service REST API + Thunder OAuth2 — see
 contract and flow.
 
 **Status:** the deploy / invoke / poll bodies in `heavy/amp_client.py` and
-`heavy/observer.py` are `NotImplementedError` scaffolds. The control flow,
-cell selection, env-var precheck, and reporting are committed; the bodies get
-filled once the snapshot workflow publishes its first artifact. Until then the
-heavy jobs are `continue-on-error: true` in CI.
+`heavy/observer.py` are **implemented** against the Go e2e reference, with
+mocked-HTTP unit tests (`tests/test_heavy_client.py`). They haven't run
+against a live AMP stack yet (no snapshot exists), so the heavy jobs stay
+`continue-on-error: true` in CI until a real run validates end to end —
+expect the timing constants and the observer `/spans` param mapping to need
+a tune on first run (see `heavy/HEAVY-TIER-DEPLOY.md` → "Implementation
+status").
 
 **Snapshot cadence:** `heavy-tier-snapshot.yaml` builds the pre-baked k3d
 image set (every AMP service image + every init-container image from

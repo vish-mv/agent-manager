@@ -1166,11 +1166,12 @@ These are deliberately deferred to v2+:
 4. **Console rendering tests.** Out of scope for this design.
 5. **Migrating off Traceloop entirely.** Out of scope; the provider
    abstraction is what makes that conversation tractable when it arrives.
-6. **Heavy-tier bodies past the scaffold.** `heavy/amp_client.py` and
-   `heavy/observer.py` ship as `NotImplementedError` scaffolds — control
-   flow is committed, the REST + observer calls follow the e2e Go
-   reference. Bodies get filled once the snapshot workflow produces its
-   first artifact and there's something to validate against (Phase 8).
+6. **Heavy-tier first live run.** `heavy/amp_client.py` and
+   `heavy/observer.py` are implemented against the e2e Go reference (with
+   mocked-HTTP unit tests) but have never run against a live AMP stack. The
+   first real run needs a published snapshot + the IDP/AMP secrets, and will
+   likely require tuning the timing constants and the observer `/spans`
+   param mapping. Until then the heavy jobs are `continue-on-error: true`.
 7. **Per-kind triage diffs.** Today's `.diff.md` pages list the union of
    `attributes.required` across the cell's expected kinds. A richer
    per-kind diff (expected schema slice vs captured span attribute map)

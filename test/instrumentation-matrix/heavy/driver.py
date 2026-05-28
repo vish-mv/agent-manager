@@ -6,22 +6,27 @@ traces-observer-service for the resulting spans, validates against the
 contract, and writes a per-cell report. Failures fall into the same
 taxonomy the emission tier uses (categorize.FailureCategory).
 
-This file is a scaffold — the heavy lifting in `heavy.amp_client` and
-`heavy.observer` is `NotImplementedError` pending the first snapshot
-artifact. The control flow is committed so Phase 8 can fill bodies
-without restructuring.
+The deploy/invoke/poll bodies (heavy.amp_client, heavy.observer, and
+_invoke_agent below) are implemented against the Go e2e reference but have
+not yet run against a live AMP stack — no heavy-tier snapshot exists. The
+heavy job stays `continue-on-error: true` in CI until a real run validates
+this end to end; expect timing constants and the observer namespace/
+component mapping to need a tune on first run.
 """
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
+
+import requests
 
 from harness.heavy_subset import select_heavy_subset
 from harness.manifest import Cell, expand_matrix, load_manifest
 from harness.reports import CellResult, write_cell_report
 from harness.validator import ContractValidator
 from heavy import k3d
-from heavy.amp_client import AmpClient, IdpCredentials
+from heavy.amp_client import AmpClient, DeployedAgent, IdpCredentials
 from heavy.observer import poll_traces
 from providers import PROVIDERS
 
@@ -101,9 +106,10 @@ def _run_cell(cell: Cell, client: AmpClient) -> CellResult:
         framework_version=cell.framework_version,
         python_version=cell.python,
     )
+    observer_base_url = os.environ["TRACES_OBSERVER_BASE_URL"]
     try:
         _invoke_agent(deployed)
-        spans = poll_traces(deployed)
+        spans = poll_traces(client, deployed, observer_base_url)
     finally:
         client.teardown_agent(deployed)
 
@@ -180,17 +186,41 @@ def _run_cell(cell: Cell, client: AmpClient) -> CellResult:
     )
 
 
-def _invoke_agent(deployed) -> None:
-    """POST a known prompt at the deployed agent's `/chat` endpoint.
+def _invoke_agent(deployed: DeployedAgent) -> None:
+    """POST a fixed prompt to the deployed agent's endpoint to drive trace
+    emission. Auth is the `X-API-Key` header (mirrors
+    test/e2e/operations/agent/invoke_agent.go). Retries through the
+    post-deploy warm-up window where the endpoint may briefly 503/502.
 
-    All cell samples ultimately produce a single-turn LLM call, so a fixed
-    prompt is enough to drive trace emission. Real implementation is in
-    Phase 8 — see HEAVY-TIER-DEPLOY.md.
+    The body is the AMP chat shape (`{"messages": [{"role","content"}]}`).
+    A single-turn prompt is enough — every cell sample bottoms out in one
+    LLM call, which is what we need a span for.
     """
-    raise NotImplementedError(
-        "Heavy-tier agent invocation is a scaffold (Phase 8); the deployed "
-        "agent exposes a `/chat` endpoint authenticated by deployed.api_key."
-    )
+    body = {"messages": [{"role": "user", "content": "Answer in one word: capital of France?"}]}
+    deadline = time.monotonic() + 180
+    last = ""
+    while time.monotonic() < deadline:
+        try:
+            resp = requests.post(
+                deployed.endpoint_url,
+                json=body,
+                headers={"X-API-Key": deployed.api_key},
+                timeout=60,
+            )
+        except requests.RequestException as e:  # endpoint not reachable yet
+            last = str(e)
+            time.sleep(5)
+            continue
+        if resp.status_code in (502, 503):  # warming up
+            last = f"{resp.status_code}"
+            time.sleep(5)
+            continue
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"agent invocation returned {resp.status_code}: {resp.text[:300]}"
+            )
+        return
+    raise TimeoutError(f"agent endpoint never became ready (last: {last})")
 
 
 if __name__ == "__main__":

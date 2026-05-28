@@ -93,7 +93,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install nox pyyaml
+      # requests: heavy/driver.py + amp_client/observer use it for the
+      # AMP REST + observer calls (the emission tier never makes live calls).
+      - run: pip install nox pyyaml requests
       - name: Run heavy tier
         working-directory: test/instrumentation-matrix
         # Required env vars are set in the matching org/repo secrets once the
