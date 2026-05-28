@@ -1,0 +1,43 @@
+{
+  "$id": "traceloop/v1/span.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "attributes": {
+      "type": "object"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "parentSpanId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "resource": {
+      "type": "object"
+    },
+    "spanId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "traceId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "attributes",
+    "traceId",
+    "spanId"
+  ],
+  "title": "Traceloop v1 — span envelope",
+  "type": "object"
+}

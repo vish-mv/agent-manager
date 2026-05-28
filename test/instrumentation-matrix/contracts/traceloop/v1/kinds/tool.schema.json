@@ -1,0 +1,68 @@
+{
+  "$id": "traceloop/v1/kinds/tool.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "anyOf": [
+        {
+          "required": [
+            "traceloop.entity.name"
+          ]
+        },
+        {
+          "required": [
+            "function.name"
+          ]
+        },
+        {
+          "required": [
+            "gen_ai.tool.name"
+          ]
+        }
+      ],
+      "properties": {
+        "function.name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "gen_ai.tool.name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "gen_ai.tool.status": {
+          "type": "string"
+        },
+        "traceloop.entity.input": {
+          "type": "string"
+        },
+        "traceloop.entity.name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "traceloop.entity.output": {
+          "type": "string"
+        },
+        "traceloop.span.kind": {
+          "const": "tool"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "attributes"
+  ],
+  "title": "Traceloop v1 — tool span",
+  "type": "object"
+}

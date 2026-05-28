@@ -1,0 +1,26 @@
+{
+  "$id": "traceloop/v1/kinds/unknown.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "attributes"
+  ],
+  "title": "Traceloop v1 — unknown span",
+  "type": "object"
+}

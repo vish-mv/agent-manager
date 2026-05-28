@@ -94,6 +94,12 @@ pin in `libs/amp-instrumentation/pyproject.toml`, it:
 That issue is your cue to start Scenario A below. The watcher never bumps a pin or
 opens a PR itself — the version cut stays a deliberate, manual decision.
 
+Before bumping `release-config.json`, validate the new Traceloop version with the
+instrumentation matrix — add it to `test/instrumentation-matrix/matrix.yaml` and let
+the advisory matrix run tell you exactly which framework/python combos regress. See
+[`test/instrumentation-matrix/RUNBOOK.md`](../test/instrumentation-matrix/RUNBOOK.md)
+→ "Onboard a new Traceloop release."
+
 **One-time setup** (needs repo admin):
 
 - Create the label once:

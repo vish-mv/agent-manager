@@ -1,0 +1,123 @@
+schemaVersion: 1
+
+providers:
+  traceloop:
+    versions: ["0.60.0"]
+    # Maps traceloop_version → init-container instrumentation_version. The
+    # heavy tier resolves the image tag
+    # `amp-python-instrumentation-provider:<instr>-python<X.Y>` from this map.
+    # Keep entries here even when release-config.json drops a version — that
+    # catalog tracks what's actively shipped, not what the matrix tests. Run
+    # `make check-matrix-manifest` to enforce that this map covers everything
+    # release-config.json currently lists.
+    instrumentationVersions:
+      "0.60.0": "0.2.1"
+    contractSchema: "v1"
+
+  manual:
+    # The manual path doesn't pin a SDK version — the cell exercises the
+    # published samples/manual-instrumentation-agent/, which depends only on
+    # the OpenAI Python SDK + stdlib opentelemetry.
+    versions: ["0.1.0"]
+    contractSchema: "v1"
+
+frameworks:
+  # Auto-instrumentation frameworks below all use `provider: traceloop` —
+  # otherwise the manual provider would cross-product into each one and
+  # produce nonsensical (manual × langchain) cells. The manual-rag entry
+  # further down explicitly opts into `provider: manual` only.
+
+  - name: langchain
+    provider: traceloop
+    package: langchain
+    versions: ["0.3.27"]
+    samplePath: cells/langchain_sample.py
+    spanKinds: [llm]
+    extras: [langchain-openai, openai]
+
+  - name: langgraph
+    provider: traceloop
+    package: langgraph
+    versions: ["0.2.74"]
+    samplePath: cells/langgraph_sample.py
+    # Tool execution is NOT emitted as a separate span by Traceloop 0.60's
+    # LangGraph instrumentation — see FINDINGS.md F-008. May also be missing
+    # because my harness doesn't capture span events (F-009).
+    spanKinds: [llm]
+    extras: [langchain-openai, langchain-core, openai]
+
+  - name: llama-index
+    provider: traceloop
+    package: llama-index
+    versions: ["0.12.0"]
+    samplePath: cells/llama_index_sample.py
+    spanKinds: [llm, embedding]
+    extras: [llama-index-llms-openai, llama-index-embeddings-openai, openai]
+
+  - name: crewai
+    provider: traceloop
+    package: crewai
+    # crewai 1.1.0 is the version that both:
+    #   (a) Traceloop's CrewAI instrumentation accepts (>= 1.0), and
+    #   (b) does not pin opentelemetry-api in a range incompatible with
+    #       traceloop-sdk 0.60.0.
+    # crewai 1.14.x tightens opentelemetry-api to ~=1.34 which collides with
+    # traceloop-sdk's >=1.38 requirement; the matrix surfaced this during
+    # the first attempt at the CrewAI cell.
+    versions: ["1.1.0"]
+    samplePath: cells/crewai_sample.py
+    # Traceloop 0.60's CrewAI instrumentation folds tool calls into events on
+    # the agent span rather than emitting a separate tool span, so the matrix
+    # only expects llm/agent/crewaitask kinds for CrewAI cells.
+    spanKinds: [llm, agent, crewaitask]
+    extras: [crewai-tools==1.1.0, openai]
+
+  - name: openai-direct
+    provider: traceloop
+    package: openai
+    # openai 1.55.0 + httpx 0.28+ blows up at client construction
+    # (TypeError on `proxies=` kwarg). See FINDINGS.md F-010. Pin to a
+    # version that supports the httpx 0.28+ that Traceloop pulls in.
+    versions: ["2.38.0"]
+    samplePath: cells/openai_direct_sample.py
+    spanKinds: [llm]
+    extras: []
+
+  - name: manual-rag
+    provider: manual          # restricts this framework to the manual provider only
+    package: openai           # the published sample's runtime dep is just openai
+    versions: ["2.38.0"]
+    samplePath: cells/manual_rag_sample.py
+    spanKinds: [agent, chain, embedding, retriever, rerank, llm, tool]
+    extras: []
+
+  - name: anthropic-direct
+    provider: traceloop
+    package: anthropic
+    # Same httpx-0.28 story as openai-direct; anthropic 0.40 has the same
+    # `proxies` kwarg path. Pin to a version that works with the resolved
+    # httpx. See FINDINGS.md F-010.
+    versions: ["0.45.0"]
+    samplePath: cells/anthropic_direct_sample.py
+    spanKinds: [llm]
+    extras: []
+
+python:
+  # Must cover every Python AMP baselines in .github/release-config.json.
+  # scripts/check-matrix-manifest.py enforces this. Locally, filter to one
+  # cell with --cell-id so you don't need every Python installed; CI fans
+  # out across all four.
+  versions: ["3.10", "3.11", "3.12", "3.13"]
+
+defaultCell:
+  provider: traceloop
+  providerVersion: "0.60.0"
+  framework: langchain
+  frameworkVersion: "0.3.27"
+  python: "3.11"
+
+heavyTier:
+  perTraceloopVersion: 1
+  perFramework: 1
+
+known-broken: []

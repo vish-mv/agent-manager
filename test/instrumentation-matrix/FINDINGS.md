@@ -1,0 +1,193 @@
+# Instrumentation matrix — findings log
+
+Every time the matrix exposes a gap that requires either an upstream change, an
+observer change, or a schema concession, an entry lands here. Each entry has an
+ID, the affected combo, the symptom, what we did about it, and what would let
+us undo the concession.
+
+The schema rules in `contracts/traceloop/v1/` and `cmd/gen-contract/contract.go`
+should never relax silently — every relaxation has an `F-NNN` entry justifying
+it. When upstream fixes a finding, drop the concession, regenerate the schemas
+via `make gen-instrumentation-contract`, and **remove the entry** — a fully
+resolved finding's rationale lives on in its commit message + the code
+comments, so this log stays focused on what's still active. (IDs are never
+reused, so removed numbers just leave a gap.)
+
+## Conventions
+
+- **ID**: `F-NNN`, monotonically increasing, never reused. Reference from
+  commit messages, contract.go, and code comments.
+- **Status**: `open` (no fix yet) or `mitigated` (a workaround/concession on
+  our side is in force without the upstream being fixed). A genuinely
+  resolved finding is removed rather than kept.
+- **Combo**: `(provider × version) × (framework × version)` whose emission
+  exhibits the gap. If the gap is provider-only, omit the framework half.
+- **Symptom**: what the matrix observes — a missing kind, a wrong type,
+  spans that don't validate, install failures, etc.
+- **Mitigation**: what we changed locally — schema concession, observer fallback,
+  classifier rule, skipped cell. Cross-reference the commit SHA.
+- **Re-tighten when**: the precise upstream change that would let us drop the
+  mitigation.
+
+---
+
+## F-001 — Traceloop stringifies every `crewai.*` attribute
+
+- **Status**: mitigated
+- **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.1.0`
+- **Discovered**: 2026-05-27 (CrewAI cell first record + replay)
+- **Symptom**: every attribute under the `crewai.*` namespace arrives on the
+  captured span as a Python `str`, even values that are logically `int` /
+  `bool` / structured (`crewai.agent.max_iter`, `crewai.task.delegations`,
+  `crewai.task.async_execution`, `crewai.task.id`, …). The original v1
+  schema declared `crewai.agent.max_iter` as `integer`; emission failed
+  validation with `'25' is not of type 'integer'`.
+- **Suspected cause**: Traceloop's `opentelemetry-instrumentation-crewai`
+  applies `str(...)` (or similar serialization) to every CrewAI attribute
+  before calling `span.set_attribute(...)`. Other Traceloop instrumentations
+  (OpenAI, LangChain) preserve native types — so this is specific to the
+  CrewAI module.
+- **Mitigation**: declare every `crewai.*` attribute type as `string` in
+  `cmd/gen-contract/contract.go`. The schema reflects reality; if Traceloop
+  later tightens, validation tightens with it.
+- **Re-tighten when**: Traceloop's CrewAI instrumentation emits native types.
+  Check by inspecting a fresh CrewAI cell's `capturedSpans` and grepping for
+  any `[int]`/`[bool]` typed `crewai.*` value.
+
+## F-002 — Observer's `CrewAITaskData.Name` has no upstream source
+
+- **Status**: mitigated
+- **Combo**: any `crewai *` (CrewAI's Task class lacks a `name` field)
+- **Discovered**: 2026-05-27
+- **Symptom**: schemas required `crewai.task.name`; cells failed validation
+  because the attribute is never emitted. Observer's
+  `populateCrewAITaskAttributes` reads `attrs["crewai.task.name"]` and writes
+  it to `CrewAITaskData.Name` — leaving `Name` empty in practice.
+- **Suspected cause**: CrewAI Tasks are identified by `description` (the
+  natural-language prompt), not by a `name` field. The `name` key was carried
+  into the contract from `traces-observer-service/opensearch/types.go` comments
+  without verifying it had an upstream emitter. Schema fabricated a requirement.
+- **Mitigation**: dropped `crewai.task.name` from the crewaitask schema.
+  Replaced with required `crewai.task.description` (which IS emitted) so the
+  schema still enforces task-identifiability.
+- **Re-tighten when**: either (a) the observer is updated to derive
+  `CrewAITaskData.Name` from the span name (stripping `.task` suffix) or from
+  `crewai.task.description`, or (b) `CrewAITaskData.Name` is removed from the
+  observer's data model.
+
+## F-003 — Traceloop's CrewAI 0.60 may not emit separate tool spans
+
+- **Status**: open / unconfirmed (blocked on F-009)
+- **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.1.0`
+- **Discovered**: 2026-05-27
+- **Symptom**: CrewAI cell with a tool-using agent never produces a span
+  classified as `tool`. Tool execution appears at least as
+  `crewai.agent.tools_results` on the agent span.
+- **Suspected cause** (provisional): Traceloop's `opentelemetry-instrumentation-crewai`
+  doesn't wrap CrewAI's `ToolUsage.execute` / equivalent. The reference
+  repo at `nadheesh/2026-AUS-AI-tutorial` notes
+  "openinference-instrumentation-crewai" as the source of agent-spans for
+  multi-agent traces, suggesting OpenInference may emit separate tool spans
+  where Traceloop does not.
+- **Why open / unconfirmed**: F-009 — the harness's `_to_dict` strips span
+  *events*. The OTel GenAI semconv allows tool calls to be encoded as
+  `gen_ai.tool.call` events on the assistant LLM span rather than as
+  separate spans. The captured cassette shows `finish_reason: tool_calls`
+  on the LLM response, so the data flow exists; whether Traceloop attaches
+  the per-tool-call detail as an event we can't see is unknown until F-009
+  is resolved. The "missing tool spans" conclusion may be a harness blind
+  spot, not a real upstream gap.
+- **Mitigation (temporary)**: `matrix.yaml.frameworks[crewai].spanKinds` set
+  to `[llm, agent, crewaitask]` (omits `tool`) so the cell passes today.
+  Re-evaluate once F-009 is fixed.
+- **Re-tighten when**: F-009 is resolved AND a re-run still shows no tool-kind
+  signal (then this remains a real upstream gap), OR Traceloop ships a release
+  that wraps CrewAI tool execution as separate spans, OR OpenInference is
+  added as a second instrumentation provider and its CrewAI cell asserts
+  `tool` kind.
+
+## F-004 — `crewai 1.14.x` × `traceloop-sdk 0.60` is unresolvable
+
+- **Status**: mitigated
+- **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.14.5`
+- **Discovered**: 2026-05-27
+- **Symptom**: `pip install` returns `ResolutionImpossible`. `traceloop-sdk 0.60.0`
+  requires `opentelemetry-api >=1.38, <2`; `crewai 1.14.5` requires
+  `opentelemetry-api ~=1.34`.
+- **Suspected cause**: crewai 1.x tightened its OTel pin between 1.1 and 1.14,
+  out of step with traceloop's release cadence.
+- **Mitigation**: matrix pins `crewai 1.1.0` — the most recent 1.x version
+  whose OTel deps are still compatible with traceloop 0.60.
+- **Re-tighten when**: Traceloop ships a 0.61+ release with looser
+  `opentelemetry-api` requirements; or CrewAI relaxes its `opentelemetry-api`
+  pin. At that point we can bump the matrix pin and re-record.
+
+## F-006 — Traceloop's LlamaIndex `OpenAIEmbedding` instrumentation omits vendor
+
+- **Status**: mitigated
+- **Combo**: `traceloop-sdk 0.60.0` × `llama-index 0.12.0`
+- **Discovered**: 2026-05-26
+- **Symptom**: embedding-kind spans from LlamaIndex have
+  `gen_ai.operation.name=embeddings` and `gen_ai.request.model=text-embedding-3-small`
+  but no vendor attribute at all (neither `gen_ai.system` nor `gen_ai.provider.name`).
+- **Mitigation**: `embedding` kind dropped from `VendorAnyOf` in the codegen.
+  LLM kind still requires vendor.
+- **Re-tighten when**: Traceloop's LlamaIndex instrumentation emits
+  `gen_ai.provider.name` on embedding spans.
+
+## F-008 — Traceloop's LangGraph 0.60 may not emit separate tool spans
+
+- **Status**: open / unconfirmed (blocked on F-009; same shape as F-003)
+- **Combo**: `traceloop-sdk 0.60.0` × `langgraph 0.2.74` (+ `langchain-core` `@tool`)
+- **Discovered**: 2026-05-27
+- **Symptom**: a LangGraph agent that uses a `@tool` function invoked via
+  `ToolNode` produces no captured span carrying any tool signal (no
+  `traceloop.span.kind=tool`, no `gen_ai.tool.name`, no
+  `gen_ai.operation.name=execute_tool`). The graph chose to call the tool —
+  the cassette captures a `finish_reason: tool_calls` response.
+- **Why open / unconfirmed**: same as F-003 — the tool call could be on the
+  LLM span as a `gen_ai.tool.call` event that our `_to_dict` drops. F-009
+  must be fixed before this finding can be confirmed.
+- **Mitigation (temporary)**: `matrix.yaml.frameworks[langgraph].spanKinds = [llm]`.
+- **Re-tighten when**: F-009 is resolved AND a re-run still shows no tool-kind
+  signal (then this is a real upstream gap), OR Traceloop adds tool-call
+  wrapping for LangChain/LangGraph tools, OR OpenInference is added as a
+  second provider.
+
+## F-009 — Harness doesn't capture span events
+
+- **Status**: open (harness bug)
+- **Combo**: any
+- **Discovered**: 2026-05-27 while investigating F-008
+- **Symptom**: `harness/test_cell.py:_to_dict` flattens a `ReadableSpan` into
+  a dict with `name`, `kind`, `attributes`, `resource`, `traceId`, `spanId`,
+  `parentSpanId` — but not `events`. If a provider encodes a logical
+  sub-operation (a tool call inside an LLM span, say) as a span event rather
+  than a child span, the matrix sees nothing and misclassifies coverage as
+  "missing-span-kind" when the data is actually present.
+- **Suspected cause**: my own code.
+- **Mitigation**: none yet — the missing tool-spans are being treated as
+  upstream gaps (F-003, F-008) but could be in-event in some cases. Need to
+  verify before tightening the upstream stories.
+- **Fix when**: add `events` to the `_to_dict` output, augment the classifier
+  to recognize a tool-call event on an LLM span as evidence of a tool-kind
+  sub-operation, and add a matching JSON-schema validation slot for span
+  events. Reconfirm F-003 and F-008 with the new harness before closing.
+
+## F-010 — Old SDK pins blow up against the httpx the matrix resolves
+
+- **Status**: mitigated
+- **Combo**: `openai 1.55.0` × `httpx >= 0.28`; `anthropic 0.40.0` × `httpx >= 0.28`
+- **Discovered**: 2026-05-27
+- **Symptom**: `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'`
+  at SDK client construction. httpx 0.28 removed the `proxies` kwarg; older
+  versions of the OpenAI / Anthropic SDKs still pass it.
+- **Cause**: Traceloop 0.60 doesn't pin httpx tight; the resolver picks 0.28+
+  (current). Old SDK pins predate that breaking change.
+- **Mitigation**: matrix pins `openai 2.38.0` and `anthropic 0.45.0` — both
+  support httpx 0.28+. The original `1.55.0` / `0.40.0` numbers in the plan
+  were speculative pins I made up, not validated against current httpx; the
+  matrix has now done its job by catching that.
+- **Re-tighten when**: not applicable — these are forward pins to currently-
+  compatible versions; if either SDK regresses or Traceloop pins httpx tight
+  enough to require an older SDK, the matrix will surface it.

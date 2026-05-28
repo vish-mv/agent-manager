@@ -1,0 +1,320 @@
+name: Instrumentation matrix — nightly
+
+# Tier 2: cron-driven nightly. Runs the full emission matrix, the heavy-tier
+# subset (advisory until validated against a live stack — see RUNBOOK.md §7),
+# revalidates known-broken cells, and on any red opens / updates a single
+# tracking issue + pings Google Chat.
+
+on:
+  schedule:
+    - cron: '30 3 * * *'             # 03:30 UTC / 09:00 IST — matches traceloop-release-watch
+  workflow_dispatch:
+
+permissions:
+  contents: read   # job-level escalation to issues: write where needed
+
+concurrency:
+  group: instrumentation-matrix-nightly
+  # Don't cancel mid-run: a flapping cron shouldn't be able to interrupt an
+  # in-progress nightly halfway through the heavy tier.
+  cancel-in-progress: false
+
+jobs:
+  full-emission-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+      # pyyaml is required by harness/manifest.py at module import time —
+      # `nox -s emission` loads it before any per-cell venv exists.
+      - run: pip install nox pyyaml
+      - name: Run full emission matrix
+        working-directory: test/instrumentation-matrix
+        run: nox -s emission
+        continue-on-error: true   # advisory — failures surface in the report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-emission
+          path: test/instrumentation-matrix/reports/cells/
+
+  heavy-tier:
+    runs-on: ubuntu-latest
+    needs: full-emission-matrix
+    timeout-minutes: 90
+    # The deploy/poll bodies are implemented but unvalidated against a live
+    # stack, and the build-from-source bring-up itself is first-run-tunable —
+    # so keep continue-on-error until a real run is green, then drop it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      # Build the AMP component images from this branch and stand up the full
+      # stack on k3d (NOT the released quick-start images — the matrix must
+      # exercise the PR's observer + instrumentation changes).
+      - uses: ./.github/actions/amp-dev-stack
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # requests: heavy/driver.py + amp_client/observer use it for the
+      # AMP REST + observer calls (the emission tier never makes live calls).
+      - run: pip install nox pyyaml requests
+      - name: Run heavy tier
+        working-directory: test/instrumentation-matrix
+        # Service URLs + IDP creds default to the dev bring-up's values
+        # (see heavy/driver.py); only the LLM keys are real secrets, and
+        # they're forwarded into each deployed agent so it can make calls.
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: nox -s heavy
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-heavy
+          path: test/instrumentation-matrix/reports/heavy/
+
+  revalidate-known-broken:
+    runs-on: ubuntu-latest
+    needs: full-emission-matrix
+    permissions:
+      contents: read
+      issues: write   # opens the "drop exemption" issue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+      - run: pip install nox pyyaml
+      - name: Expand known-broken cells
+        id: expand
+        working-directory: test/instrumentation-matrix
+        run: |
+          python <<'PY' > /tmp/revalidate-cells.txt
+          import sys
+          sys.path.insert(0, ".")
+          from harness.manifest import load_manifest
+          from harness.revalidate import cells_from_known_broken
+          for c in cells_from_known_broken(load_manifest("matrix.yaml")):
+              print(c.id)
+          PY
+          if [ -s /tmp/revalidate-cells.txt ]; then
+            echo "have_cells=true" >> "$GITHUB_OUTPUT"
+            echo "Revalidating $(wc -l < /tmp/revalidate-cells.txt) known-broken cell(s)"
+            cat /tmp/revalidate-cells.txt
+          else
+            echo "have_cells=false" >> "$GITHUB_OUTPUT"
+            echo "No known-broken entries — nothing to revalidate."
+          fi
+      - name: Run revalidation
+        if: steps.expand.outputs.have_cells == 'true'
+        working-directory: test/instrumentation-matrix
+        env:
+          # Route reports into a side directory so they don't overwrite the
+          # main emission run; the noxfile honors REPORTS_DIR.
+          REPORTS_DIR: reports/revalidate
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          mkdir -p reports/revalidate
+          while read cell; do
+            nox -s emission -- --cell-id="$cell" || true
+          done < /tmp/revalidate-cells.txt
+      - name: Open issue when a known-broken cell now passes
+        if: steps.expand.outputs.have_cells == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: test/instrumentation-matrix
+        run: |
+          passing=$(python <<'PY'
+          import json, glob
+          for f in sorted(glob.glob("reports/revalidate/*.json")):
+              r = json.load(open(f))
+              if r["result"] == "pass":
+                  print(r["cellId"])
+          PY
+          )
+          if [ -n "$passing" ]; then
+            {
+              echo "The following cells are listed in \`matrix.yaml.known-broken\` but now pass revalidation. Drop their entries:"
+              echo
+              while read -r cell; do echo "- \`$cell\`"; done <<< "$passing"
+            } > /tmp/revalidate-body.md
+            gh issue create \
+              --title "known-broken cells now passing — drop exemptions" \
+              --label instrumentation-matrix-revalidate \
+              --body-file /tmp/revalidate-body.md
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.expand.outputs.have_cells == 'true'
+        with:
+          name: nightly-revalidate
+          path: test/instrumentation-matrix/reports/revalidate/
+
+  publish-matrix-summary:
+    runs-on: ubuntu-latest
+    needs: [full-emission-matrix, heavy-tier, revalidate-known-broken]
+    # Run on success AND on failures (so the summary + metrics still compute
+    # when cells go red), but not during cancellation — `!cancelled()` avoids
+    # the lingering-queued-job behavior a bare `always()` causes on supersede.
+    if: ${{ !cancelled() }}
+    outputs:
+      counts_json: ${{ steps.metrics.outputs.counts_json }}
+      has_failures: ${{ steps.metrics.outputs.has_failures }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install nox pyyaml
+      - uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: nightly-emission
+          path: test/instrumentation-matrix/reports/cells/
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: nightly-heavy
+          path: test/instrumentation-matrix/reports/heavy/
+        continue-on-error: true
+      - name: Build summary
+        working-directory: test/instrumentation-matrix
+        run: nox -s report
+      - name: Compute alert metrics
+        id: metrics
+        working-directory: test/instrumentation-matrix
+        run: |
+          python <<'PY' >> "$GITHUB_OUTPUT"
+          import json, sys
+          sys.path.insert(0, ".")
+          from pathlib import Path
+          from harness.aggregator import collect_metrics
+          from harness.manifest import load_manifest
+
+          # Walk both tiers so heavy failures contribute to has_failures and
+          # surface in the Chat alert per design §12.4. Manifest passes in
+          # for accurate framework-name lookup (cell-id regex parser can be
+          # fooled by numeric framework segments).
+          m = collect_metrics(
+              [Path("reports/cells"), Path("reports/heavy")],
+              manifest=load_manifest(Path("matrix.yaml")),
+          )
+          # Single-line JSON for the GITHUB_OUTPUT escape rules.
+          print(f"counts_json={json.dumps(m)}")
+          print(f"has_failures={'true' if m['counts'].get('fail', 0) > 0 else 'false'}")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-summary
+          path: test/instrumentation-matrix/reports/summary.md
+
+  open-issue-on-failure:
+    runs-on: ubuntu-latest
+    # All three are listed so the `if:` references below resolve (a
+    # needs.<job> reference is only in scope when the job is in `needs`).
+    # `needs.heavy-tier.result == 'failure'` is a no-op today because heavy
+    # is continue-on-error; left in so the condition is correct the moment
+    # that flag flips.
+    needs: [publish-matrix-summary, full-emission-matrix, heavy-tier]
+    permissions:
+      contents: read
+      issues: write   # opens/updates the failure-tracking issue
+    if: |
+      needs.publish-matrix-summary.outputs.has_failures == 'true' ||
+      needs.full-emission-matrix.result == 'failure' ||
+      needs.heavy-tier.result == 'failure'
+    outputs:
+      issue_url: ${{ steps.issue.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: nightly-summary
+          path: /tmp/summary
+      - name: Open or update tracking issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh issue list \
+            --label instrumentation-matrix-failure \
+            --state open \
+            --json number,url --jq '.[0]')
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            number=$(echo "$existing" | python3 -c 'import json,sys;print(json.load(sys.stdin)["number"])')
+            url=$(echo "$existing" | python3 -c 'import json,sys;print(json.load(sys.stdin)["url"])')
+            gh issue comment "$number" --body-file /tmp/summary/summary.md
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+          else
+            url=$(gh issue create \
+              --title "Instrumentation matrix nightly failure" \
+              --label instrumentation-matrix-failure \
+              --body-file /tmp/summary/summary.md)
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+          fi
+
+  notify-google-chat:
+    runs-on: ubuntu-latest
+    needs: [publish-matrix-summary, open-issue-on-failure, full-emission-matrix, heavy-tier]
+    # Quiet on success. Run on any failure signal: per-cell failures the
+    # report counted, OR a catastrophic emission/heavy crash before reports
+    # were written. `!cancelled()` lets this fire even when
+    # open-issue-on-failure itself errored (intermittent gh-cli 5xx) —
+    # ISSUE_URL just stays empty — while still dying cleanly on cancellation
+    # rather than lingering queued like a bare `always()` would.
+    if: |
+      !cancelled() && (
+        needs.publish-matrix-summary.outputs.has_failures == 'true' ||
+        needs.full-emission-matrix.result == 'failure' ||
+        needs.heavy-tier.result == 'failure'
+      )
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Post Chat message
+        env:
+          # Matches the secret name `traceloop-release-watch.yaml` already uses.
+          GCHAT_WEBHOOK_URL: ${{ secrets.GCHAT_WEBHOOK_URL }}
+          ISSUE_URL: ${{ needs.open-issue-on-failure.outputs.issue_url }}
+          METRICS_JSON: ${{ needs.publish-matrix-summary.outputs.counts_json }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        working-directory: test/instrumentation-matrix
+        run: |
+          if [ -z "${GCHAT_WEBHOOK_URL}" ]; then
+            echo "::warning::GCHAT_WEBHOOK_URL secret is not set; skipping Chat notification."
+            exit 0
+          fi
+          python <<'PY'
+          import json, os, sys
+          sys.path.insert(0, ".")
+          import requests
+          from harness.notify import build_chat_message
+
+          metrics = json.loads(os.environ["METRICS_JSON"])
+          msg = build_chat_message(
+              run_url=os.environ["RUN_URL"],
+              issue_url=os.environ.get("ISSUE_URL") or None,
+              counts=metrics.get("counts", {}),
+              categories=metrics.get("categories", {}),
+              likely_cause=metrics.get("likely_cause"),
+          )
+          r = requests.post(os.environ["GCHAT_WEBHOOK_URL"], json=msg, timeout=15)
+          r.raise_for_status()
+          print("Chat alert posted.")
+          PY
