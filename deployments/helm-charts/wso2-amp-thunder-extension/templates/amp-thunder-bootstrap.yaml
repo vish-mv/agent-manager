@@ -248,7 +248,104 @@ data:
     {{- end }}
     {{- end }}
 
-  52-amp-console-app.sh: |
+  52-amp-console-branding.sh: |
+    #!/bin/bash
+    set -e
+
+    SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
+    source "${SCRIPT_DIR}/common.sh"
+
+    # -----------------------------------------------------------------------
+    # 1. Upsert the Agent Manager Console layout (GET → PUT if exists, POST if not)
+    # -----------------------------------------------------------------------
+    LAYOUT_ID="{{ .Values.thunder.bootstrap.ampConsoleLayout.id }}"
+    log_info "Checking if Agent Manager Console layout (id: $LAYOUT_ID) exists..."
+
+    LAYOUT_PAYLOAD='{{ .Values.thunder.bootstrap.ampConsoleLayout | toJson }}'
+
+    RESPONSE=$(thunder_api_call GET "/design/layouts/$LAYOUT_ID")
+    HTTP_CODE="${RESPONSE: -3}"
+
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      log_info "Layout exists, updating..."
+      RESPONSE=$(thunder_api_call PUT "/design/layouts/$LAYOUT_ID" "$LAYOUT_PAYLOAD")
+      HTTP_CODE="${RESPONSE: -3}"
+      if [[ "$HTTP_CODE" == "200" ]] || [[ "$HTTP_CODE" == "201" ]]; then
+        log_info "Layout updated successfully"
+        echo "$LAYOUT_ID" > /tmp/amp-console-layout-id
+      else
+        log_error "Failed to update layout (HTTP $HTTP_CODE)"
+        echo "Response: ${RESPONSE%???}"
+        exit 1
+      fi
+    elif [[ "$HTTP_CODE" == "404" ]]; then
+      log_info "Layout not found, creating..."
+      RESPONSE=$(thunder_api_call POST "/design/layouts" "$LAYOUT_PAYLOAD")
+      HTTP_CODE="${RESPONSE: -3}"
+      BODY="${RESPONSE%???}"
+      if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]]; then
+        NEW_LAYOUT_ID=$(echo "$BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        log_info "Layout created successfully (id: $NEW_LAYOUT_ID)"
+        echo "$NEW_LAYOUT_ID" > /tmp/amp-console-layout-id
+      else
+        log_error "Failed to create layout (HTTP $HTTP_CODE)"
+        echo "Response: ${RESPONSE%???}"
+        exit 1
+      fi
+    else
+      log_error "Failed to check layout existence (HTTP $HTTP_CODE)"
+      echo "Response: ${RESPONSE%???}"
+      exit 1
+    fi
+
+    # -----------------------------------------------------------------------
+    # 2. Upsert the Agent Manager Console theme (find by handle, then PUT/POST)
+    # -----------------------------------------------------------------------
+    THEME_HANDLE="{{ .Values.thunder.bootstrap.ampConsoleTheme.handle }}"
+    log_info "Checking if theme '$THEME_HANDLE' already exists..."
+
+    RESPONSE=$(thunder_api_call GET "/design/themes")
+    HTTP_CODE="${RESPONSE: -3}"
+    BODY="${RESPONSE%???}"
+    if [[ "$HTTP_CODE" != "200" ]]; then
+      log_error "Failed to list themes (HTTP $HTTP_CODE)"
+      echo "Response: $BODY"
+      exit 1
+    fi
+
+    EXISTING_THEME_ID=$(echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"handle\":\"$THEME_HANDLE\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+    THEME_PAYLOAD='{{ .Values.thunder.bootstrap.ampConsoleTheme | toJson }}'
+
+    if [[ -n "$EXISTING_THEME_ID" ]]; then
+      log_info "Theme '$THEME_HANDLE' exists (id: $EXISTING_THEME_ID), updating..."
+      RESPONSE=$(thunder_api_call PUT "/design/themes/$EXISTING_THEME_ID" "$THEME_PAYLOAD")
+      HTTP_CODE="${RESPONSE: -3}"
+      if [[ "$HTTP_CODE" == "200" ]]; then
+        log_info "Theme updated successfully"
+        echo "$EXISTING_THEME_ID" > /tmp/amp-console-theme-id
+      else
+        log_error "Failed to update theme (HTTP $HTTP_CODE)"
+        echo "Response: ${RESPONSE%???}"
+        exit 1
+      fi
+    else
+      log_info "Theme '$THEME_HANDLE' not found, creating..."
+      RESPONSE=$(thunder_api_call POST "/design/themes" "$THEME_PAYLOAD")
+      HTTP_CODE="${RESPONSE: -3}"
+      BODY="${RESPONSE%???}"
+      if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]]; then
+        NEW_THEME_ID=$(echo "$BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        log_info "Theme created successfully (id: $NEW_THEME_ID)"
+        echo "$NEW_THEME_ID" > /tmp/amp-console-theme-id
+      else
+        log_error "Failed to create theme (HTTP $HTTP_CODE)"
+        echo "Response: $BODY"
+        exit 1
+      fi
+    fi
+
+  53-amp-console-app.sh: |
     #!/bin/bash
     set -e
 
@@ -256,6 +353,10 @@ data:
     source "${SCRIPT_DIR}/common.sh"
 
     log_info "Checking if application '{{ .Values.thunder.bootstrap.ampConsoleClient.name }}' already exists..."
+
+    # Read theme ID and layout ID written by 51b-amp-console-branding.sh
+    CONSOLE_THEME_ID=$(cat /tmp/amp-console-theme-id 2>/dev/null || echo "")
+    CONSOLE_LAYOUT_ID=$(cat /tmp/amp-console-layout-id 2>/dev/null || echo "{{ .Values.thunder.bootstrap.ampConsoleLayout.id }}")
 
     # Get the default OU ID
     RESPONSE=$(thunder_api_call GET "/organization-units/tree/default")
@@ -305,8 +406,11 @@ data:
     APP_PAYLOAD='{
       "name": "{{ .Values.thunder.bootstrap.ampConsoleClient.name }}",
       "description": "{{ .Values.thunder.bootstrap.ampConsoleClient.description }}",
+      "logoUrl": "{{ .Values.thunder.bootstrap.ampConsoleClient.logoUrl }}",
       "ouId": "'${DEFAULT_OU_ID}'",
       "authFlowId": "'${AUTH_FLOW_ID}'",
+      "themeId": "'${CONSOLE_THEME_ID}'",
+      "layoutId": "'${CONSOLE_LAYOUT_ID}'",
       "allowedUserTypes": {{ .Values.thunder.bootstrap.ampConsoleClient.allowedUserTypes | toJson }},
       "inboundAuthConfig": [
         {
@@ -361,7 +465,7 @@ data:
       fi
     fi
 
-  53-workload-publisher-app.sh: |
+  54-workload-publisher-app.sh: |
     #!/bin/bash
     set -e
 
@@ -448,7 +552,7 @@ data:
       fi
     fi
 
-  54-observer-resource-reader-app.sh: |
+  55-observer-resource-reader-app.sh: |
     #!/bin/bash
     set -e
 
@@ -535,7 +639,7 @@ data:
       fi
     fi
 
-  55-amp-publisher-client.sh: |
+  56-amp-publisher-client.sh: |
     #!/bin/bash
     set -e
 
@@ -640,7 +744,7 @@ data:
       fi
     fi
 
-  56-amp-system-client.sh: |
+  57-amp-system-client.sh: |
     #!/bin/bash
     set -e
 
@@ -791,7 +895,7 @@ data:
     fi
 
 
-  57-amctl-client.sh: |
+  58-amctl-client.sh: |
     #!/bin/bash
     set -e
 
@@ -904,7 +1008,7 @@ data:
       fi
     fi
 
-  58-am-mcp-client.sh: |
+  59-am-mcp-client.sh: |
     #!/bin/bash
     set -e
 
