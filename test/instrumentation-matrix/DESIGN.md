@@ -1091,9 +1091,9 @@ cell → verdict in under a minute.**
 
 ```
 test/instrumentation-matrix/
-├── README.md                              # operational quickstart
-├── INSTRUMENTATION-MATRIX-DESIGN.md       # this document
-├── INSTRUMENTATION-MATRIX.md              # long-form operational runbook
+├── README.md                              # quickstart + doc index
+├── DESIGN.md                              # this document (architecture)
+├── RUNBOOK.md                             # operational how-to (incl. heavy-tier deploy contract)
 ├── FINDINGS.md                            # upstream gaps + schema concessions log (F-NNN ids)
 ├── matrix.yaml                            # the manifest (§4)
 ├── noxfile.py                             # cell driver (§8) + report + heavy sessions
@@ -1130,8 +1130,7 @@ test/instrumentation-matrix/
 ├── contracts/
 │   └── traceloop/v1/...                   # §6.1
 ├── cassettes/                             # §7.2
-├── heavy/                                 # heavy-tier driver (§9)
-│   ├── HEAVY-TIER-DEPLOY.md               # AMP REST + Thunder OAuth2 contract
+├── heavy/                                 # heavy-tier driver (§9; deploy contract in RUNBOOK.md §7)
 │   ├── driver.py                          # orchestrator
 │   ├── amp_client.py                      # agent-manager-service REST client
 │   ├── observer.py                        # traces-observer-service query

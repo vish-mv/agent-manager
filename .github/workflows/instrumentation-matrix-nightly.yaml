@@ -1,7 +1,7 @@
 name: Instrumentation matrix — nightly
 
 # Tier 2: cron-driven nightly. Runs the full emission matrix, the heavy-tier
-# subset (advisory until heavy bodies land — see heavy/HEAVY-TIER-DEPLOY.md),
+# subset (advisory until validated against a live stack — see RUNBOOK.md §7),
 # revalidates known-broken cells, and on any red opens / updates a single
 # tracking issue + pings Google Chat.
 

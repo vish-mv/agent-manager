@@ -115,18 +115,14 @@ def emission(session, cell):
 
 @nox.session(python=False)
 def heavy(session):
-    """Run the heavy tier against a restored k3d cluster.
+    """Run the heavy tier against a live AMP stack.
 
-    Pre-conditions (caller's responsibility — set up by the nightly /
-    manual workflows in Phase 8):
-    - k3d cluster `openchoreo-local-setup` is up with the snapshot restored.
-    - AMP_API_BASE_URL points at the in-cluster agent-manager-service.
-    - AMP_ADMIN_TOKEN is set.
-    - OPENAI_API_KEY / ANTHROPIC_API_KEY are set for cells that need them.
-
-    Session-level pre-conditions are checked by heavy/driver.py itself;
-    this session is just the launcher. See heavy/HEAVY-TIER-DEPLOY.md for
-    the full contract.
+    Pre-condition (caller's responsibility — the nightly / manual workflows
+    use the `amp-dev-stack` composite for this): AMP is up on k3d, built from
+    the working tree, with the API + observer reachable on their default
+    localhost ports. Service URLs + IDP creds default in heavy/driver.py;
+    only OPENAI_API_KEY / ANTHROPIC_API_KEY need to be set (forwarded into
+    each deployed agent). See RUNBOOK.md §7 for the full deploy contract.
     """
     # Use the interpreter that's running nox itself — that's the matrix
     # venv locally and the workflow's setup-python interpreter in CI. A bare

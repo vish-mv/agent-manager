@@ -1,11 +1,14 @@
 # AMP Instrumentation Matrix
 
-Per-PR + nightly compatibility matrix for AMP instrumentation. See
-[`INSTRUMENTATION-MATRIX-DESIGN.md`](./INSTRUMENTATION-MATRIX-DESIGN.md)
-for the architecture and
-[`INSTRUMENTATION-MATRIX.md`](./INSTRUMENTATION-MATRIX.md) for the long-form
-operational runbook (adding cells, triaging reds, onboarding a Traceloop
-release, adding a provider). This README is the quickstart.
+Per-PR + nightly compatibility matrix for AMP instrumentation. Three docs:
+
+- [`DESIGN.md`](./DESIGN.md) — architecture of the test system (the *why*).
+- [`RUNBOOK.md`](./RUNBOOK.md) — operational how-to: adding cells, triaging
+  reds, onboarding a Traceloop release, adding a provider, the heavy tier.
+- [`FINDINGS.md`](./FINDINGS.md) — living `F-NNN` log of upstream gaps and
+  schema concessions.
+
+This README is the quickstart.
 
 ## Run locally
 

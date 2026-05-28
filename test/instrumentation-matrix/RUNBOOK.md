@@ -2,7 +2,7 @@
 
 Day-to-day runbook for the instrumentation-matrix suite: how to extend it,
 read its output, and keep it honest. For *why* it's built this way, see the
-[design doc](./INSTRUMENTATION-MATRIX-DESIGN.md). For the running log of
+[design doc](./DESIGN.md). For the running log of
 upstream gaps and schema concessions, see [`FINDINGS.md`](./FINDINGS.md).
 
 ## 1. What the matrix is (and isn't)
@@ -22,7 +22,7 @@ emit spans the observer can parse" — across the combinations declared in
   validated against a live stack; see §7.)
 
 It is **not** a correctness test of the agents themselves, a load test, or a
-console/UI test — it asserts the *shape* of emitted telemetry, nothing more.
+console/UI test — it asserts the *shape* of instfinintmatieemitted telemetry, nothing more.
 
 ## 2. Add a framework, a framework version, or a Traceloop version
 
@@ -150,35 +150,81 @@ When a cell exposes a regression you can't fix immediately:
 Pair every `known-broken` entry with an `F-NNN` entry in `FINDINGS.md` so the
 "why" survives.
 
-## 7. Heavy tier and its bring-up
+## 7. Heavy tier (deploy contract + ops)
 
 The heavy tier (`nox -s heavy`, `heavy/driver.py`) deploys a representative
 cell subset (`harness/heavy_subset.py`: one per Traceloop version + one per
-framework, on the default python) against a real AMP stack on k3d, then polls
-`traces-observer-service` and validates the enriched spans. Deploy is via the
-agent-manager-service REST API + Thunder OAuth2 — see
-[`heavy/HEAVY-TIER-DEPLOY.md`](./heavy/HEAVY-TIER-DEPLOY.md) for the env-var
-contract and flow.
+framework, on the default python) against a real AMP stack on k3d, invokes
+each agent, polls `traces-observer-service`, and validates the spans that
+survive the full pipeline against the same `traceloop/v1` contract.
 
-**Status:** the deploy / invoke / poll bodies in `heavy/amp_client.py` and
-`heavy/observer.py` are **implemented** against the Go e2e reference, with
-mocked-HTTP unit tests (`tests/test_heavy_client.py`). They haven't run
-against a live AMP stack yet, so the heavy jobs stay `continue-on-error:
-true` in CI until a real run validates end to end — expect the
-`amp-dev-stack` bring-up, the timing constants, and the observer `/spans`
-param mapping to need a tune on first run (see
-`heavy/HEAVY-TIER-DEPLOY.md` → "Implementation
-status").
+### Bring-up: build-from-source
 
-**Bring-up:** the CI heavy job stands up AMP from the working tree via the
-dev `make setup` chain (the `.github/actions/amp-dev-stack` composite):
-`setup-k3d` → `setup-openchoreo` (builds + loads the traces-observer +
-instrumentation-provider images from source) → `setup-platform`
-(agent-manager-service via compose) → migrate → port-forward → gateway.
-This is **build-from-source**, not the released `quick-start/install.sh` the
-e2e suite uses — the matrix must exercise the PR's own observer +
-instrumentation code, so it builds those images rather than pulling a
-released tag.
+The CI heavy job stands up AMP from the **working tree** via the dev
+`make setup` chain, wrapped in the `.github/actions/amp-dev-stack` composite:
+`setup-k3d` → `setup-openchoreo` (builds + `k3d image import`s the
+traces-observer + python-instrumentation-provider images from source) →
+`setup-platform` (agent-manager-service via docker-compose) → migrate →
+port-forward → gateway.
+
+This is deliberately **not** `deployments/quick-start/install.sh`, which
+deploys *released* images at a pinned `VERSION` (that's what e2e uses). The
+matrix's job is to catch regressions in the PR's observer + instrumentation
+code, so it must run the PR's images.
+
+### Environment
+
+The only real **secrets** are the LLM keys; everything else defaults to the
+values the dev bring-up exposes (overridable, never required):
+
+| Variable | Kind | Default / source |
+|---|---|---|
+| `OPENAI_API_KEY` | **secret** | forwarded into each deployed agent so it can make real calls |
+| `ANTHROPIC_API_KEY` | **secret** | for the anthropic-direct cell |
+| `AMP_API_BASE_URL` | default | `http://localhost:9000` |
+| `TRACES_OBSERVER_BASE_URL` | default | `http://localhost:9098` |
+| `IDP_TOKEN_URL` | default | `http://thunder.amp.localhost:8080/oauth2/token` |
+| `IDP_CLIENT_ID` | default | `amp-api-client` |
+| `IDP_CLIENT_SECRET` | default | `amp-api-client-secret` |
+
+Auth is OAuth2 `client_credentials` against Thunder IDP (no static admin
+token); the client fetches + refreshes a bearer token, mirroring
+`test/e2e/framework/auth.go`. Agents are created through
+`agent-manager-service`'s REST API — `test/e2e/framework/shared_agent.go` is
+the canonical reference — not raw Workload manifests.
+
+### Per-cell flow
+
+```
+reset OpenSearch indices
+deploy_agent(cell)          # create project → agent (pins instrumentationVersion +
+                            #   forwards LLM keys) → poll build → deploy → mint API key
+invoke_agent(deployed)      # POST /chat (X-API-Key), retry through warm-up
+spans = poll_traces(...)    # list traces → span summaries → per-span detail
+teardown_agent(deployed)    # always (finally)
+validate(spans) + write report
+```
+
+Span fetch reuses the emission validator: the observer's span-detail endpoint
+(`GET /api/v1/traces/{traceId}/spans/{spanId}`) returns a raw `attributes`
+map identical in shape to what the emission tier validates, so there's no
+separate heavy contract.
+
+### Status (not yet run against a live stack)
+
+The deploy / invoke / poll bodies are **implemented** against the Go e2e
+reference with mocked-HTTP unit tests (`tests/test_heavy_client.py`), but
+haven't run against a live AMP stack. The heavy jobs stay
+`continue-on-error: true` until a real run is green. Three things are
+first-run-tunable:
+
+1. **The `amp-dev-stack` bring-up** — the `make setup` chain hasn't run on a
+   CI runner; watch `setup-platform.sh`'s Node check, the (unneeded) console
+   in docker-compose, and the background port-forwards binding 9000/9098.
+2. **Timing constants** (build 600s, deploy 300s).
+3. **The observer `/spans` param names** — `poll_traces` sends both
+   `organization`/`project`/`agent` and best-effort `namespace`/`component`;
+   confirm the right mapping on a live observer.
 
 ## 8. Where the schemas come from
 

@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 import requests
 
-# Timeout budget (see HEAVY-TIER-DEPLOY.md §"Timeout budget").
+# Timeout budget (see RUNBOOK.md §7).
 _BUILD_TIMEOUT_S = 600
 _BUILD_POLL_S = 10
 _DEPLOY_TIMEOUT_S = 300
