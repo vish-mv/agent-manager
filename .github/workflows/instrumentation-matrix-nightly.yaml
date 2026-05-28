@@ -49,10 +49,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: full-emission-matrix
     timeout-minutes: 90
-    # The deploy/poll bodies are implemented but unvalidated against a live
-    # stack, and the build-from-source bring-up itself is first-run-tunable —
-    # so keep continue-on-error until a real run is green, then drop it.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       # Build the AMP component images from this branch and stand up the full
@@ -228,9 +224,8 @@ jobs:
     runs-on: ubuntu-latest
     # All three are listed so the `if:` references below resolve (a
     # needs.<job> reference is only in scope when the job is in `needs`).
-    # `needs.heavy-tier.result == 'failure'` is a no-op today because heavy
-    # is continue-on-error; left in so the condition is correct the moment
-    # that flag flips.
+    # A heavy-tier failure now opens the tracking issue too — it no longer
+    # runs continue-on-error.
     needs: [publish-matrix-summary, full-emission-matrix, heavy-tier]
     permissions:
       contents: read

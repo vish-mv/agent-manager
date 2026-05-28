@@ -168,9 +168,6 @@ jobs:
     # Normal run: gate behind a green emission matrix. heavy_only: run
     # regardless (run-cells is skipped), so always() is needed to evaluate at all.
     if: ${{ always() && (inputs.heavy_only || (inputs.include_heavy_tier && needs.run-cells.result == 'success')) }}
-    # Deploy/poll bodies are implemented but the build-from-source bring-up
-    # is unvalidated in CI — keep continue-on-error until a real run is green.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       # Build AMP component images from this branch + stand up the stack on
