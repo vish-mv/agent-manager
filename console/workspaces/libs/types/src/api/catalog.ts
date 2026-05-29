@@ -74,4 +74,5 @@ export interface ListCatalogLLMProvidersQuery {
   kind?: "LlmProvider";
   limit?: number;
   offset?: number;
+  environmentId?: string;
 }

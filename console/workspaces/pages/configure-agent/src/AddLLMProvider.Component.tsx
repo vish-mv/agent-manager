@@ -281,9 +281,10 @@ export const AddLLMProviderComponent: React.FC = () => {
     projName: projectId,
     agentName: agentId,
   });
+  const selectedEnvironmentId = environments[selectedEnvIndex]?.id;
   const { data: catalogData } = useListCatalogLLMProviders(
     { orgName: orgId },
-    { limit: 50 },
+    { limit: 50, environmentId: selectedEnvironmentId },
   );
   const { data: templatesData } = useListLLMProviderTemplates(
     { orgName: orgId },
@@ -594,7 +595,7 @@ export const AddLLMProviderComponent: React.FC = () => {
     }
     return false;
   });
-  const isFormValid = allEnvsHaveProvider;
+  const isFormValid = hasAnyProvider;
 
   const mutationError = createConfig.isError
     ? createConfig.error
@@ -839,8 +840,8 @@ export const AddLLMProviderComponent: React.FC = () => {
         )}
 
         {hasAnyProvider && !allEnvsHaveProvider && (
-          <Alert severity="warning" icon={<AlertTriangle size={18} />}>
-            Select a service provider for all environments before saving.
+          <Alert severity="info" icon={<AlertTriangle size={18} />}>
+            Some environments don&apos;t have a provider selected. They will be skipped on save.
           </Alert>
         )}
 
@@ -850,7 +851,7 @@ export const AddLLMProviderComponent: React.FC = () => {
             Cancel
           </Button>
           <Tooltip
-            title={!isFormValid && !isPending ? "Select a service provider for all environments to enable save" : ""}
+            title={!isFormValid && !isPending ? "Select a service provider for at least one environment to enable save" : ""}
             placement="top"
           >
             <span>
