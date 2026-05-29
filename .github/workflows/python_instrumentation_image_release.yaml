@@ -38,7 +38,7 @@ jobs:
       instrumentation-images: ${{ steps.set-matrix.outputs.instrumentation-images }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch }}
 
@@ -85,7 +85,7 @@ jobs:
         image: ${{ fromJson(needs.load-config.outputs.instrumentation-images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch }}
 
@@ -117,7 +117,7 @@ jobs:
     if: always()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch }}
 

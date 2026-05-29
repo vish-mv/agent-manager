@@ -21,7 +21,7 @@ jobs:
       has-changes: ${{ steps.detect.outputs.has-changes }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -80,7 +80,7 @@ jobs:
         chart: ${{ fromJson(needs.detect-changes.outputs.charts) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Helm and dependencies
         uses: ./.github/actions/setup-helm-chart
@@ -107,7 +107,7 @@ jobs:
         chart: ${{ fromJson(needs.detect-changes.outputs.charts) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Helm and dependencies
         uses: ./.github/actions/setup-helm-chart
@@ -155,7 +155,7 @@ jobs:
         chart: ${{ fromJson(needs.detect-changes.outputs.charts) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Helm and dependencies
         uses: ./.github/actions/setup-helm-chart

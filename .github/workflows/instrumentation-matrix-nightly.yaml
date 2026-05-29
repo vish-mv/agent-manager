@@ -24,8 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: |
             3.10
@@ -39,7 +39,7 @@ jobs:
         working-directory: test/instrumentation-matrix
         run: nox -s emission
         continue-on-error: true   # advisory — failures surface in the report
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: nightly-emission
@@ -50,12 +50,12 @@ jobs:
     needs: full-emission-matrix
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # Build the AMP component images from this branch and stand up the full
       # stack on k3d (NOT the released quick-start images — the matrix must
       # exercise the PR's observer + instrumentation changes).
       - uses: ./.github/actions/amp-dev-stack
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       # requests: heavy/driver.py + amp_client/observer use it for the
@@ -73,7 +73,7 @@ jobs:
           # The deployed customer-support-agent's web-search tool needs this.
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: nox -s heavy
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: nightly-heavy
@@ -86,8 +86,8 @@ jobs:
       contents: read
       issues: write   # opens the "drop exemption" issue
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: |
             3.10
@@ -154,7 +154,7 @@ jobs:
               --label instrumentation-matrix-revalidate \
               --body-file /tmp/revalidate-body.md
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.expand.outputs.have_cells == 'true'
         with:
           name: nightly-revalidate
@@ -171,18 +171,18 @@ jobs:
       counts_json: ${{ steps.metrics.outputs.counts_json }}
       has_failures: ${{ steps.metrics.outputs.has_failures }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - run: pip install nox pyyaml
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: always()
         with:
           name: nightly-emission
           path: test/instrumentation-matrix/reports/cells/
         continue-on-error: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: always()
         with:
           name: nightly-heavy
@@ -214,7 +214,7 @@ jobs:
           print(f"counts_json={json.dumps(m)}")
           print(f"has_failures={'true' if m['counts'].get('fail', 0) > 0 else 'false'}")
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: nightly-summary
@@ -237,8 +237,8 @@ jobs:
     outputs:
       issue_url: ${{ steps.issue.outputs.url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
         with:
           name: nightly-summary
           path: /tmp/summary
@@ -280,8 +280,8 @@ jobs:
         needs.heavy-tier.result == 'failure'
       )
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - run: pip install requests

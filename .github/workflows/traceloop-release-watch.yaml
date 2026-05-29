@@ -36,7 +36,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # This workflow only reads files; it never uses git credentials, so
           # do not leave the runner token in the local git config.

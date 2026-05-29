@@ -19,7 +19,7 @@ runs:
     - name: Cache Helm chart dependencies
       id: helm-cache
       if: hashFiles(format('{0}/Chart.lock', inputs.chart-path)) != ''
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ${{ inputs.chart-path }}/charts
         key: helm-charts-${{ hashFiles(format('{0}/Chart.lock', inputs.chart-path)) }}

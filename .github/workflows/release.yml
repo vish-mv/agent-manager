@@ -62,7 +62,7 @@ jobs:
         shell: bash
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: true
@@ -236,7 +236,7 @@ jobs:
       charts: ${{ steps.set-matrix.outputs.charts }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: amp/v${{ inputs.target_version }}
 
@@ -294,7 +294,7 @@ jobs:
         image: ${{ fromJson(needs.load-config.outputs.images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: amp/v${{ inputs.target_version }}
 
@@ -333,7 +333,7 @@ jobs:
         image: ${{ fromJson(needs.load-config.outputs.instrumentation-images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: amp/v${{ inputs.target_version }}
 
@@ -372,7 +372,7 @@ jobs:
         chart: ${{ fromJson(needs.load-config.outputs.charts) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: amp/v${{ inputs.target_version }}
 
@@ -384,7 +384,7 @@ jobs:
       - name: Cache Helm chart dependencies
         id: helm-cache
         if: hashFiles(format('{0}/Chart.lock', matrix.chart.path)) != ''
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ matrix.chart.path }}/charts
           key: helm-charts-${{ hashFiles(format('{0}/Chart.lock', matrix.chart.path)) }}
@@ -420,7 +420,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: amp/v${{ inputs.target_version }}

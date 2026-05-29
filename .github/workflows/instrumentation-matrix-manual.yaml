@@ -56,8 +56,8 @@ jobs:
       cell_ids: ${{ steps.expand.outputs.cell_ids }}
       count: ${{ steps.expand.outputs.count }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - run: pip install pyyaml
@@ -87,8 +87,8 @@ jobs:
       matrix:
         cell: ${{ fromJSON(needs.resolve-cells.outputs.cell_ids) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: |
             3.10
@@ -106,7 +106,7 @@ jobs:
         run: nox -s emission -- --cell-id=${{ matrix.cell }}
       # Artifact name is keyed by run-id + cell id so multiple manual runs
       # don't collide. The trailing slashes pull cells/ and cassettes/ both.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: manual-cell-${{ matrix.cell }}
@@ -122,10 +122,10 @@ jobs:
       contents: write        # push the refresh branch
       pull-requests: write   # open the cassette-refresh PR
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           # Download every manual-cell-* artifact into a single staging dir.
           # Each unpacks into manual-cell-<id>/cassettes/<framework>/...
@@ -169,11 +169,11 @@ jobs:
     # regardless (run-cells is skipped), so always() is needed to evaluate at all.
     if: ${{ always() && (inputs.heavy_only || (inputs.include_heavy_tier && needs.run-cells.result == 'success')) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # Build AMP component images from this branch + stand up the stack on
       # k3d (build-from-source, not released images).
       - uses: ./.github/actions/amp-dev-stack
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       # requests: heavy/driver.py + amp_client/observer use it for the
@@ -234,7 +234,7 @@ jobs:
             | while read -r p; do echo "----- $p -----"; kubectl logs -n openchoreo-data-plane "$p" --tail=80 2>/dev/null; done
           echo "=== recent events ==="
           kubectl get events -A --sort-by=.lastTimestamp 2>/dev/null | tail -80
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: manual-heavy
