@@ -12,6 +12,7 @@ os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 import dotenv
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from agent.crew import create_crew
 
@@ -22,7 +23,15 @@ dotenv.load_dotenv()
 crew = create_crew()
 
 
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+
+# Sync `def` (not `async`): crew.kickoff() is blocking, so FastAPI runs this in
+# a threadpool instead of stalling the event loop. The Pydantic model gives a
+# 422 (not an opaque 500) when `message` is missing, matching openapi.yaml.
 @app.post("/chat")
-async def chat(payload: dict):
-    result = crew.kickoff(inputs={"question": payload["message"]})
+def chat(payload: ChatRequest):
+    result = crew.kickoff(inputs={"question": payload.message})
     return JSONResponse(content={"response": str(result)})
