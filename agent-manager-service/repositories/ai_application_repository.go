@@ -28,9 +28,9 @@ import (
 // AIApplicationRepository defines the interface for AI application persistence.
 type AIApplicationRepository interface {
 	// Create inserts an AIApplication row. Uses ON CONFLICT DO NOTHING so it is safe to
-	// call idempotently on retry. The app UUID is populated if the row was inserted; it
-	// remains zero if the conflict path fired (caller must re-fetch with GetByAgentEnv).
-	Create(ctx context.Context, tx *gorm.DB, app *models.AIApplication) error
+	// call idempotently on retry. Returns (true, nil) when a new row was inserted, or
+	// (false, nil) when the conflict path fired (caller must re-fetch with GetByAgentEnv).
+	Create(ctx context.Context, tx *gorm.DB, app *models.AIApplication) (bool, error)
 	// GetByAgentEnv returns the AIApplication for the given org/project/agent/environment.
 	// Returns gorm.ErrRecordNotFound when no row exists.
 	GetByAgentEnv(ctx context.Context, orgName, projectName, agentID, envName string) (*models.AIApplication, error)
@@ -51,14 +51,19 @@ func NewAIApplicationRepository(db *gorm.DB) *AIApplicationRepo {
 }
 
 // Create inserts an AIApplication, ignoring conflicts on (organization_name, project_name, agent_id, environment_name).
-func (r *AIApplicationRepo) Create(ctx context.Context, tx *gorm.DB, app *models.AIApplication) error {
+// Returns (true, nil) when a new row was inserted; (false, nil) when ON CONFLICT DO NOTHING fired.
+func (r *AIApplicationRepo) Create(ctx context.Context, tx *gorm.DB, app *models.AIApplication) (bool, error) {
 	db := tx
 	if db == nil {
 		db = r.db
 	}
-	return db.WithContext(ctx).
+	result := db.WithContext(ctx).
 		Clauses(clause.OnConflict{DoNothing: true}).
-		Create(app).Error
+		Create(app)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
 }
 
 // GetByAgentEnv fetches the AIApplication for a specific agent+environment in an org.

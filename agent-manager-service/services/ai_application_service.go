@@ -18,8 +18,11 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+
+	"gorm.io/gorm"
 
 	"github.com/wso2/agent-manager/agent-manager-service/models"
 	"github.com/wso2/agent-manager/agent-manager-service/repositories"
@@ -73,11 +76,10 @@ func (s *AIApplicationService) EnsureAndBind(
 		OrganizationName: orgName,
 	}
 
-	if err := s.appRepo.Create(ctx, nil, app); err != nil {
+	created, err := s.appRepo.Create(ctx, nil, app)
+	if err != nil {
 		return nil, false, fmt.Errorf("failed to create AI application: %w", err)
 	}
-
-	created := app.UUID.String() != "00000000-0000-0000-0000-000000000000"
 
 	// ON CONFLICT DO NOTHING fired — re-fetch the existing record.
 	if !created {
@@ -103,17 +105,59 @@ func (s *AIApplicationService) EnsureAndBind(
 
 // Delete removes the AIApplication record for a given agent+environment.
 // Called when the last LLM config for that agent+env is deleted.
+// Broadcasts application.updated with empty mappings so the gateway stops enforcing
+// per-consumer rate limits for this application immediately.
 func (s *AIApplicationService) Delete(ctx context.Context, orgName, projectName, agentID, envName string) error {
+	app, err := s.appRepo.GetByAgentEnv(ctx, orgName, projectName, agentID, envName)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("failed to fetch AI application before delete: %w", err)
+	}
+
 	if err := s.appRepo.DeleteByAgentEnv(ctx, nil, orgName, projectName, agentID, envName); err != nil {
 		return fmt.Errorf("failed to delete AI application: %w", err)
 	}
+
+	s.broadcastDeletionToAllGateways(ctx, orgName, app)
+
 	s.logger.Info("Deleted AI application",
+		"applicationUUID", app.UUID,
+		"applicationHandle", app.Handle,
 		"agentID", agentID,
 		"projectName", projectName,
 		"envName", envName,
 		"orgName", orgName,
 	)
 	return nil
+}
+
+// broadcastDeletionToAllGateways sends an application.updated event with empty mappings to every
+// gateway in the org. The gateway interprets empty mappings as a full revocation of the application,
+// stopping per-consumer rate limit enforcement immediately without requiring a reconnect.
+func (s *AIApplicationService) broadcastDeletionToAllGateways(ctx context.Context, orgName string, app *models.AIApplication) {
+	gateways, err := s.gatewayRepo.GetByOrganizationID(orgName)
+	if err != nil {
+		s.logger.Warn("Failed to list gateways for application deletion broadcast; gateway will sync on reconnect",
+			"orgName", orgName, "applicationUUID", app.UUID, "error", err)
+		return
+	}
+
+	event := &models.ApplicationUpdatedEvent{
+		ApplicationID:   app.Handle,
+		ApplicationUUID: app.UUID.String(),
+		ApplicationName: app.Name,
+		ApplicationType: "ai-agent",
+		Mappings:        []models.ApplicationAPIKeyMapping{},
+	}
+
+	for _, gw := range gateways {
+		if err := s.gatewayService.BroadcastApplicationUpdatedEvent(gw.UUID.String(), event); err != nil {
+			s.logger.Warn("Failed to broadcast application deletion to gateway; will sync on reconnect",
+				"gatewayID", gw.UUID, "applicationUUID", app.UUID, "error", err)
+		}
+	}
 }
 
 // broadcastToAllGateways sends an application.updated event to every gateway in the org.
