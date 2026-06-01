@@ -1,0 +1,73 @@
+name: amctl CLI
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "cli/**"
+      - "scripts/build-amctl.sh"
+      - ".github/workflows/amctl-pr-checks.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: PR Checks
+    runs-on:
+      - codebuild-wso2_agent-manager-${{ github.run_id }}-${{ github.run_attempt }}
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.1.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Check formatting
+        run: |
+          UNFORMATTED="$(gofmt -l .)"
+          if [ -n "$UNFORMATTED" ]; then
+            echo "Code is not formatted. Run 'gofmt -w .' from cli/."
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Check module metadata
+        if: ${{ !cancelled() }}
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Verify modules
+        if: ${{ !cancelled() }}
+        run: go mod verify
+
+      - name: Run golangci-lint
+        if: ${{ !cancelled() }}
+        uses: golangci/golangci-lint-action@v9
+        with:
+          working-directory: cli
+          args: --modules-download-mode=readonly
+
+      - name: Run go vet
+        if: ${{ !cancelled() }}
+        run: go vet -mod=readonly ./...
+
+      - name: Run tests
+        if: ${{ !cancelled() }}
+        run: go test -mod=readonly -race ./...
+
+      - name: Build CLI
+        if: ${{ !cancelled() }}
+        run: go build -mod=readonly ./...
+
+      - name: Validate build script syntax
+        if: ${{ !cancelled() }}
+        working-directory: .
+        run: sh -n scripts/build-amctl.sh

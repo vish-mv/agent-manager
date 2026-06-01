@@ -57,7 +57,6 @@ BUILD_TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$BUILD_TMPDIR"' EXIT
 
 cd "${REPO_ROOT}/cli"
-go mod tidy
 
 for target in $TARGETS; do
     os="${target%/*}"
