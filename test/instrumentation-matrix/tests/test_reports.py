@@ -114,3 +114,16 @@ def test_load_cell_report_feeds_triage_without_false_missing(tmp_path):
     assert "| `gen_ai.provider.name` | present |" in md
     assert "| `gen_ai.request.model` | present |" in md
     assert "MISSING" not in md
+
+
+def test_report_round_trips_evidence(tmp_path):
+    from harness.reports import CellResult, write_cell_report
+    import json
+    r = CellResult(
+        cell_id="traceloop-0.61.0-langchain-0.3.27-py3.11",
+        result="fail", category="ingest-rejected", skip_reason=None,
+        evidence={"agent": "Failed to export batch code: 401"},
+    )
+    out = write_cell_report(r, reports_dir=tmp_path)
+    payload = json.loads(out.read_text())
+    assert payload["evidence"] == {"agent": "Failed to export batch code: 401"}

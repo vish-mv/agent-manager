@@ -19,6 +19,7 @@ class CellResult:
     coverage: dict[str, Any] = field(default_factory=dict)
     violations: list[dict[str, Any]] = field(default_factory=list)
     captured_spans: list[dict[str, Any]] = field(default_factory=list)
+    evidence: dict[str, Any] | None = None
 
 
 def write_cell_report(result: CellResult, reports_dir: Path) -> Path:
@@ -36,6 +37,7 @@ def write_cell_report(result: CellResult, reports_dir: Path) -> Path:
         "coverage": result.coverage,
         "violations": result.violations,
         "capturedSpans": spans_blob,
+        "evidence": result.evidence,
     }
     out = reports_dir / f"{result.cell_id}.json"
     out.write_text(json.dumps(payload, indent=2))
