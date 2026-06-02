@@ -78,9 +78,9 @@ reused, so removed numbers just leave a gap.)
   `crewai.task.description`, or (b) `CrewAITaskData.Name` is removed from the
   observer's data model.
 
-## F-003 — Traceloop's CrewAI 0.60 may not emit separate tool spans
+## F-003 — Traceloop's CrewAI does not emit separate tool spans
 
-- **Status**: open / unconfirmed (blocked on F-009)
+- **Status**: open / confirmed (see the 2026-06-02 note; F-009 resolved)
 - **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.1.0`
 - **Discovered**: 2026-05-27
 - **Symptom**: CrewAI cell with a tool-using agent never produces a span
@@ -149,54 +149,6 @@ reused, so removed numbers just leave a gap.)
 - **2026-06-02 (traceloop 0.61.0)**: embedding spans still carry no vendor
   (neither `gen_ai.system` nor `gen_ai.provider.name`). Not fixed; concession
   stays.
-
-## F-008 — Traceloop's LangGraph 0.60 may not emit separate tool spans
-
-- **Status**: open / unconfirmed (blocked on F-009; same shape as F-003)
-- **Combo**: `traceloop-sdk 0.60.0` × `langgraph 0.2.74` (+ `langchain-core` `@tool`)
-- **Discovered**: 2026-05-27
-- **Symptom**: a LangGraph agent that uses a `@tool` function invoked via
-  `ToolNode` produces no captured span carrying any tool signal (no
-  `traceloop.span.kind=tool`, no `gen_ai.tool.name`, no
-  `gen_ai.operation.name=execute_tool`). The graph chose to call the tool —
-  the cassette captures a `finish_reason: tool_calls` response.
-- **Why open / unconfirmed**: same as F-003 — the tool call could be on the
-  LLM span as a `gen_ai.tool.call` event that our `_to_dict` drops. F-009
-  must be fixed before this finding can be confirmed.
-- **Mitigation (temporary)**: `matrix.yaml.frameworks[langgraph].spanKinds = [llm]`.
-- **Re-tighten when**: F-009 is resolved AND a re-run still shows no tool-kind
-  signal (then this is a real upstream gap), OR Traceloop adds tool-call
-  wrapping for LangChain/LangGraph tools, OR OpenInference is added as a
-  second provider.
-- **2026-06-02 (F-009 now fixed; traceloop 0.60.0 + 0.61.0)**: **contradicted.**
-  With the current sample/cassette, the LangGraph cell emits a *separate*
-  `execute_tool double` span (`traceloop.span.kind=tool`,
-  `gen_ai.operation.name=execute_tool`) on **both** 0.60.0 and 0.61.0 — the
-  classifier already counts it as `tool`. No events are involved. The original
-  "no tool span" observation no longer holds (likely the sample/cassette
-  exercises the tool now). **Recommend resolving F-008 by adding `tool` to
-  `frameworks[langgraph].spanKinds`** — note this is true independent of the
-  0.61.0 bump.
-
-## F-009 — Harness doesn't capture span events
-
-- **Status**: open (harness bug)
-- **Combo**: any
-- **Discovered**: 2026-05-27 while investigating F-008
-- **Symptom**: `harness/test_cell.py:_to_dict` flattens a `ReadableSpan` into
-  a dict with `name`, `kind`, `attributes`, `resource`, `traceId`, `spanId`,
-  `parentSpanId` — but not `events`. If a provider encodes a logical
-  sub-operation (a tool call inside an LLM span, say) as a span event rather
-  than a child span, the matrix sees nothing and misclassifies coverage as
-  "missing-span-kind" when the data is actually present.
-- **Suspected cause**: my own code.
-- **Mitigation**: none yet — the missing tool-spans are being treated as
-  upstream gaps (F-003, F-008) but could be in-event in some cases. Need to
-  verify before tightening the upstream stories.
-- **Fix when**: add `events` to the `_to_dict` output, augment the classifier
-  to recognize a tool-call event on an LLM span as evidence of a tool-kind
-  sub-operation, and add a matching JSON-schema validation slot for span
-  events. Reconfirm F-003 and F-008 with the new harness before closing.
 
 ## F-010 — Old SDK pins blow up against the httpx the matrix resolves
 
