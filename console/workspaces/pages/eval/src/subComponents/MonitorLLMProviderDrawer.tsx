@@ -115,7 +115,7 @@ const RateLimitDisplay: React.FC<{ rateLimiting?: CatalogLLMProviderEntry["rateL
   }
 
   const limitScope = consumerHasLimits ? cl : pl;
-  const isOrgWide = consumerEnabled && !consumerHasLimits;
+  const isOrgWide = !consumerHasLimits;
 
   const limits: { icon: React.ReactNode; label: string; value: string }[] = [];
   if (limitScope?.request) {

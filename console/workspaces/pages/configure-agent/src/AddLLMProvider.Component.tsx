@@ -155,8 +155,8 @@ const RateLimitDisplay: React.FC<{
 
   // Use consumer-specific limits when set; otherwise fall back to provider limits for display
   const limitScope = consumerHasLimits ? cl : pl;
-  // Shown as org-wide when: consumer is enabled but has no per-consumer numeric overrides
-  const isOrgWide = consumerEnabled && !consumerHasLimits;
+  // Org-wide whenever we fall back to provider-level limits (no per-consumer numeric overrides)
+  const isOrgWide = !consumerHasLimits;
 
   const limits: { icon: React.ReactNode; label: string; value: string }[] = [];
   if (limitScope?.request) {
