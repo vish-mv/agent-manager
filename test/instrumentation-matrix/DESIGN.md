@@ -231,7 +231,7 @@ python:
 
 defaultCell:
   provider: traceloop
-  providerVersion: "0.60.0"                # mirrors OTEL_DEFAULT_INSTRUMENTATION_VERSION's traceloop pin
+  providerVersion: "0.61.0"                # mirrors OTEL_DEFAULT_INSTRUMENTATION_VERSION's traceloop pin
   framework: langchain
   frameworkVersion: "0.3.27"
   python: "3.11"

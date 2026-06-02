@@ -32,7 +32,7 @@ across 3.10–3.13.)
 
 ```bash
 # one cell (cassette replay — no real API key needed)
-nox -s emission -- --cell-id=traceloop-0.60.0-langchain-0.3.27-py3.11
+nox -s emission -- --cell-id=traceloop-0.61.0-langchain-0.3.27-py3.11
 
 # all cells for one framework
 nox -s emission -k langchain

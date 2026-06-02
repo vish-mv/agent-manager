@@ -34,7 +34,7 @@ reused, so removed numbers just leave a gap.)
 ## F-001 — Traceloop stringifies every `crewai.*` attribute
 
 - **Status**: mitigated
-- **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.1.0`
+- **Combo**: `traceloop-sdk 0.61.0` × `crewai 1.1.0`
 - **Discovered**: 2026-05-27 (CrewAI cell first record + replay)
 - **Symptom**: every attribute under the `crewai.*` namespace arrives on the
   captured span as a Python `str`, even values that are logically `int` /
@@ -81,7 +81,7 @@ reused, so removed numbers just leave a gap.)
 ## F-003 — Traceloop's CrewAI does not emit separate tool spans
 
 - **Status**: open / confirmed (see the 2026-06-02 note; F-009 resolved)
-- **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.1.0`
+- **Combo**: `traceloop-sdk 0.61.0` × `crewai 1.1.0`
 - **Discovered**: 2026-05-27
 - **Symptom**: CrewAI cell with a tool-using agent never produces a span
   classified as `tool`. Tool execution appears at least as
@@ -106,12 +106,12 @@ reused, so removed numbers just leave a gap.)
   OR OpenInference is added as a second instrumentation provider and its CrewAI
   cell asserts the `tool` kind.
 
-## F-004 — `crewai 1.14.x` × `traceloop-sdk 0.60` is unresolvable
+## F-004 — `crewai 1.14.x` × `traceloop-sdk 0.61` is unresolvable
 
 - **Status**: mitigated
-- **Combo**: `traceloop-sdk 0.60.0` × `crewai 1.14.5`
+- **Combo**: `traceloop-sdk 0.61.0` × `crewai 1.14.5`
 - **Discovered**: 2026-05-27
-- **Symptom**: `pip install` returns `ResolutionImpossible`. `traceloop-sdk 0.60.0`
+- **Symptom**: `pip install` returns `ResolutionImpossible`. `traceloop-sdk 0.61.0`
   requires `opentelemetry-api >=1.38, <2`; `crewai 1.14.5` requires
   `opentelemetry-api ~=1.34`.
 - **Suspected cause**: crewai 1.x tightened its OTel pin between 1.1 and 1.14,
@@ -129,7 +129,7 @@ reused, so removed numbers just leave a gap.)
 ## F-006 — Traceloop's LlamaIndex `OpenAIEmbedding` instrumentation omits vendor
 
 - **Status**: mitigated
-- **Combo**: `traceloop-sdk 0.60.0` × `llama-index 0.12.0`
+- **Combo**: `traceloop-sdk 0.61.0` × `llama-index 0.12.0`
 - **Discovered**: 2026-05-26
 - **Symptom**: embedding-kind spans from LlamaIndex have
   `gen_ai.operation.name=embeddings` and `gen_ai.request.model=text-embedding-3-small`
