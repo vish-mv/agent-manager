@@ -12118,6 +12118,7 @@ components:
         - resetUnit
       properties:
         limit:
+          type: number
           description: Limit value (count for request/token, amount for cost)
           example: 1000
         resetDuration:
@@ -12126,7 +12127,11 @@ components:
           example: 1
         resetUnit:
           type: string
-          description: Reset window time unit (minute, hour, day)
+          description: Reset window time unit
+          enum:
+            - minute
+            - hour
+            - day
           example: minute
 
     RateLimitingScope:

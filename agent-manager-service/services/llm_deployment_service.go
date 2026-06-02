@@ -675,6 +675,9 @@ func (s *LLMProviderDeploymentService) generateLLMProviderDeploymentYAML(provide
 
 				// Step 2.1.2.1: Resource-specific rate limits (specific paths first)
 				for _, r := range providerLevel.ResourceWise.Resources {
+					resMethod, resPath := parseResourceKey(r.Resource)
+					resMethods := []string{resMethod}
+
 					if r.Limit.Token != nil && r.Limit.Token.Enabled {
 						tokenLimit := r.Limit.Token
 						duration, err := formatRateLimitDuration(tokenLimit.Reset.Duration, tokenLimit.Reset.Unit)
@@ -682,8 +685,8 @@ func (s *LLMProviderDeploymentService) generateLLMProviderDeploymentYAML(provide
 							return "", fmt.Errorf("invalid token reset window for resource %s: %w", r.Resource, err)
 						}
 						addOrAppendPolicyPath(&policies, tokenBasedRateLimitPolicyName, rateLimitPolicyVersion, models.LLMPolicyPath{
-							Path:    r.Resource,
-							Methods: []string{"*"},
+							Path:    resPath,
+							Methods: resMethods,
 							Params: map[string]interface{}{
 								"totalTokenLimits": []map[string]interface{}{
 									{
@@ -702,8 +705,8 @@ func (s *LLMProviderDeploymentService) generateLLMProviderDeploymentYAML(provide
 							return "", fmt.Errorf("invalid request reset window for resource %s: %w", r.Resource, err)
 						}
 						addOrAppendPolicyPath(&policies, advancedRateLimitPolicyName, rateLimitPolicyVersion, models.LLMPolicyPath{
-							Path:    r.Resource,
-							Methods: []string{"*"},
+							Path:    resPath,
+							Methods: resMethods,
 							Params: map[string]interface{}{
 								"quotas": []map[string]interface{}{
 									{
@@ -726,11 +729,10 @@ func (s *LLMProviderDeploymentService) generateLLMProviderDeploymentYAML(provide
 						if err != nil {
 							return "", fmt.Errorf("invalid cost reset window for resource %s: %w", r.Resource, err)
 						}
-						method, path := parseResourceKey(r.Resource)
-						costPath := models.LLMPolicyPath{Path: path, Methods: []string{method}}
+						costPath := models.LLMPolicyPath{Path: resPath, Methods: resMethods}
 						addOrAppendPolicyPath(&policies, costBasedRateLimitPolicyName, rateLimitPolicyVersion, models.LLMPolicyPath{
-							Path:    path,
-							Methods: []string{method},
+							Path:    resPath,
+							Methods: resMethods,
 							Params: map[string]interface{}{
 								"budgetLimits": []map[string]interface{}{
 									{

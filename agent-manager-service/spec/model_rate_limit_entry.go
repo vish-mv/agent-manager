@@ -20,10 +20,10 @@ var _ MappedNullable = &RateLimitEntry{}
 // RateLimitEntry struct for RateLimitEntry
 type RateLimitEntry struct {
 	// Limit value (count for request/token, amount for cost)
-	Limit interface{} `json:"limit"`
+	Limit float32 `json:"limit"`
 	// Reset window duration
 	ResetDuration int32 `json:"resetDuration"`
-	// Reset window time unit (minute, hour, day)
+	// Reset window time unit
 	ResetUnit string `json:"resetUnit"`
 }
 
@@ -31,7 +31,7 @@ type RateLimitEntry struct {
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewRateLimitEntry(limit interface{}, resetDuration int32, resetUnit string) *RateLimitEntry {
+func NewRateLimitEntry(limit float32, resetDuration int32, resetUnit string) *RateLimitEntry {
 	this := RateLimitEntry{}
 	this.Limit = limit
 	this.ResetDuration = resetDuration
@@ -48,10 +48,9 @@ func NewRateLimitEntryWithDefaults() *RateLimitEntry {
 }
 
 // GetLimit returns the Limit field value
-// If the value is explicit nil, the zero value for interface{} will be returned
-func (o *RateLimitEntry) GetLimit() interface{} {
+func (o *RateLimitEntry) GetLimit() float32 {
 	if o == nil {
-		var ret interface{}
+		var ret float32
 		return ret
 	}
 
@@ -60,16 +59,15 @@ func (o *RateLimitEntry) GetLimit() interface{} {
 
 // GetLimitOk returns a tuple with the Limit field value
 // and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *RateLimitEntry) GetLimitOk() (*interface{}, bool) {
-	if o == nil || IsNil(o.Limit) {
+func (o *RateLimitEntry) GetLimitOk() (*float32, bool) {
+	if o == nil {
 		return nil, false
 	}
 	return &o.Limit, true
 }
 
 // SetLimit sets field value
-func (o *RateLimitEntry) SetLimit(v interface{}) {
+func (o *RateLimitEntry) SetLimit(v float32) {
 	o.Limit = v
 }
 
@@ -131,9 +129,7 @@ func (o RateLimitEntry) MarshalJSON() ([]byte, error) {
 
 func (o RateLimitEntry) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	if o.Limit != nil {
-		toSerialize["limit"] = o.Limit
-	}
+	toSerialize["limit"] = o.Limit
 	toSerialize["resetDuration"] = o.ResetDuration
 	toSerialize["resetUnit"] = o.ResetUnit
 	return toSerialize, nil

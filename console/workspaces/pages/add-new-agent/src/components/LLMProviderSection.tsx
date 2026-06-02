@@ -156,9 +156,9 @@ const ProviderDisplay: React.FC<{
                   const limits: string[] = [];
                   const pl = provider.rateLimiting.providerLevel;
                   const cl = provider.rateLimiting.consumerLevel;
-                  if (pl?.requestLimitCount) limits.push(`${pl.requestLimitCount} req/min`);
-                  if (pl?.tokenLimitCount) limits.push(`${pl.tokenLimitCount} tokens/min`);
-                  if (cl?.requestLimitCount) limits.push(`Consumer: ${cl.requestLimitCount} req/min`);
+                  if (pl?.request?.limit) limits.push(`${pl.request.limit} req/${pl.request.resetUnit ?? "min"}`);
+                  if (pl?.token?.limit) limits.push(`${pl.token.limit} tokens/${pl.token.resetUnit ?? "min"}`);
+                  if (cl?.request?.limit) limits.push(`Consumer: ${cl.request.limit} req/${cl.request.resetUnit ?? "min"}`);
                   return limits.length > 0 ? limits.join(", ") : "Configured";
                 })()
                 : "Not configured"}

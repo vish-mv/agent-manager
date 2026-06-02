@@ -277,19 +277,31 @@ func (c *gatewayInternalController) getAPIKeysByKind(w http.ResponseWriter, r *h
 // Returns subscription plans for the authenticated gateway's organization.
 // Currently returns an empty list as subscription-based rate limiting is not used.
 func (c *gatewayInternalController) GetSubscriptionPlans(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get("api-key")
+	if apiKey == "" {
+		http.Error(w, "API key is required", http.StatusUnauthorized)
+		return
+	}
+
+	if _, err := c.gatewayService.VerifyToken(apiKey); err != nil {
+		http.Error(w, "Invalid or expired API key", http.StatusUnauthorized)
+		return
+	}
+
 	utils.WriteSuccessResponse(w, http.StatusOK, []struct{}{})
 }
 
 // gatewayApplicationResponse is the bulk-sync response format for AI applications.
-// The gateway-controller uses applicationId, applicationUuid, applicationName, and applicationType
-// to populate its StoredApplication and then resolves API key mappings from the api_keys table.
+// Mappings lists the API key UUIDs bound to the application so the gateway can
+// rebuild application→API-key bindings on reconnect without a separate request.
 type gatewayApplicationResponse struct {
-	ApplicationID   string    `json:"applicationId"`
-	ApplicationUUID string    `json:"applicationUuid"`
-	ApplicationName string    `json:"applicationName"`
-	ApplicationType string    `json:"applicationType"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ApplicationID   string                            `json:"applicationId"`
+	ApplicationUUID string                            `json:"applicationUuid"`
+	ApplicationName string                            `json:"applicationName"`
+	ApplicationType string                            `json:"applicationType"`
+	Mappings        []models.ApplicationAPIKeyMapping `json:"mappings"`
+	CreatedAt       time.Time                         `json:"createdAt"`
+	UpdatedAt       time.Time                         `json:"updatedAt"`
 }
 
 // GetApplications handles GET /api/internal/v1/applications
@@ -320,11 +332,22 @@ func (c *gatewayInternalController) GetApplications(w http.ResponseWriter, r *ht
 
 	result := make([]gatewayApplicationResponse, 0, len(apps))
 	for _, app := range apps {
+		keys, err := c.apiKeyRepo.ListByApplicationUUID(app.UUID.String())
+		if err != nil {
+			log.Error("Failed to list API keys for application", "applicationUUID", app.UUID, "error", err)
+			http.Error(w, "Failed to list application key bindings", http.StatusInternalServerError)
+			return
+		}
+		mappings := make([]models.ApplicationAPIKeyMapping, 0, len(keys))
+		for _, k := range keys {
+			mappings = append(mappings, models.ApplicationAPIKeyMapping{APIKeyUUID: k.UUID.String()})
+		}
 		result = append(result, gatewayApplicationResponse{
 			ApplicationID:   app.Handle,
 			ApplicationUUID: app.UUID.String(),
 			ApplicationName: app.Name,
 			ApplicationType: "ai-agent",
+			Mappings:        mappings,
 			CreatedAt:       app.CreatedAt,
 			UpdatedAt:       app.UpdatedAt,
 		})

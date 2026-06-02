@@ -32,6 +32,9 @@ type APIKeyRepository interface {
 	ListPermanentByArtifactKind(orgName, kind string) ([]models.StoredAPIKey, error)
 	// GetByArtifactAndName returns gorm.ErrRecordNotFound when no row matches.
 	GetByArtifactAndName(artifactUUID, name string) (*models.StoredAPIKey, error)
+	// ListByApplicationUUID returns all API keys whose artifact_uuid matches the given AI application UUID.
+	// Used by the gateway bulk-sync path to populate per-application key bindings.
+	ListByApplicationUUID(applicationUUID string) ([]models.StoredAPIKey, error)
 }
 
 // APIKeyRepo implements APIKeyRepository using GORM
@@ -88,4 +91,11 @@ func (r *APIKeyRepo) GetByArtifactAndName(artifactUUID, name string) (*models.St
 		return nil, err
 	}
 	return &key, nil
+}
+
+// ListByApplicationUUID returns all API keys whose artifact_uuid matches the given AI application UUID.
+func (r *APIKeyRepo) ListByApplicationUUID(applicationUUID string) ([]models.StoredAPIKey, error) {
+	var keys []models.StoredAPIKey
+	err := r.db.Where("artifact_uuid = ?", applicationUUID).Find(&keys).Error
+	return keys, err
 }

@@ -94,10 +94,10 @@ type rollbackResource struct {
 	proxySecretLoc    *secretmanagersvc.SecretLocation // Location for proxy API key secret
 	secretRefName     string                           // Name of the SecretReference CR to delete on rollback (internal agents only)
 	// AI application rollback fields — only set when EnsureAndBind created a new app.
-	createdNewApp bool
-	appAgentID    string
+	createdNewApp  bool
+	appAgentID     string
 	appProjectName string
-	appEnvName    string
+	appEnvName     string
 }
 
 // nonK8sNameChar matches any character not valid in a Kubernetes resource name segment.
@@ -1779,14 +1779,6 @@ func (s *agentConfigurationService) Delete(ctx context.Context, configUUID uuid.
 				return fmt.Errorf("failed to delete proxy %q: %w", proxyHandle, err)
 			}
 			s.logger.Info("Proxy already deleted, skipping", "proxyHandle", proxyHandle)
-		}
-
-		// Step 3b: Delete the AI application for this agent+env (best-effort).
-		// The app is shared across all configs for the agent+env; deleting it here is
-		// correct because we are deleting the entire config (not just one proxy).
-		if err := s.aiApplicationService.Delete(ctx, orgName, existingConfig.ProjectName, existingConfig.AgentID, env); err != nil {
-			s.logger.Warn("Failed to delete AI application during config deletion (best-effort)",
-				"agentID", existingConfig.AgentID, "env", env, "error", err)
 		}
 
 		// Delete proxy API key secret

@@ -74,6 +74,7 @@ type agentManagerService struct {
 	agentConfigurationService AgentConfigurationService
 	agentKindService          AgentKindService
 	artifactRepo              repositories.ArtifactRepository
+	aiApplicationService      *AIApplicationService
 	logger                    *slog.Logger
 }
 
@@ -88,6 +89,7 @@ func NewAgentManagerService(
 	agentConfigurationService AgentConfigurationService,
 	agentKindService AgentKindService,
 	artifactRepo repositories.ArtifactRepository,
+	aiApplicationService *AIApplicationService,
 	logger *slog.Logger,
 ) AgentManagerService {
 	return &agentManagerService{
@@ -101,6 +103,7 @@ func NewAgentManagerService(
 		agentConfigurationService: agentConfigurationService,
 		agentKindService:          agentKindService,
 		artifactRepo:              artifactRepo,
+		aiApplicationService:      aiApplicationService,
 		logger:                    logger,
 	}
 }
@@ -1915,6 +1918,7 @@ func (s *agentManagerService) deleteAgentAPIArtifact(ctx context.Context, orgNam
 // deleteAgentLLMConfigurations lists and deletes all agent-level LLM configurations for an agent.
 // Each deletion goes through the full AgentConfigurationService.Delete path so external resources
 // (proxy API keys, SecretReference CRs, proxy deployments) are cleaned up as well.
+// After all configs are deleted, the shared AI application records (one per agent+env) are removed.
 // Best-effort: individual failures are logged but do not abort the agent deletion.
 func (s *agentManagerService) deleteAgentLLMConfigurations(ctx context.Context, orgName, projectName, agentName string) {
 	listResp, err := s.agentConfigurationService.List(ctx, orgName, projectName, agentName, 1000, 0)
@@ -1931,6 +1935,11 @@ func (s *agentManagerService) deleteAgentLLMConfigurations(ctx context.Context, 
 		if delErr := s.agentConfigurationService.Delete(ctx, configUUID, orgName, projectName, agentName); delErr != nil {
 			s.logger.Warn("Failed to delete LLM configuration during agent deletion", "configUUID", cfg.UUID, "error", delErr)
 		}
+	}
+
+	// Delete all AI application records for this agent (one per environment) now that all configs are gone.
+	if delErr := s.aiApplicationService.DeleteAllByAgent(ctx, orgName, agentName); delErr != nil {
+		s.logger.Warn("Failed to delete AI applications during agent deletion", "agentName", agentName, "error", delErr)
 	}
 }
 
