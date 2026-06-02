@@ -446,9 +446,12 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
 
   const { data: environments = [], isLoading: envsLoading } =
     useListEnvironments({ orgName: orgId });
-  const drawerEnvironmentId = environments.find((e) => e.name === drawerEnvName)?.id;
-  const { data: catalogData, isLoading: catalogLoading } =
-    useListCatalogLLMProviders({ orgName: orgId }, { limit: 50, environmentId: drawerEnvironmentId });
+  const drawerEnvironmentId =
+    editingIndex !== null ? environments.find((e) => e.name === drawerEnvName)?.id : undefined;
+  const { data: catalogData, isLoading: catalogLoading } = useListCatalogLLMProviders(
+    { orgName: orgId },
+    { limit: 50, environmentId: drawerEnvironmentId },
+  );
   const { data: templatesData, isLoading: templatesLoading } =
     useListLLMProviderTemplates({ orgName: orgId });
 
