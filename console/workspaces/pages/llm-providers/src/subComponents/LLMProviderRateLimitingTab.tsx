@@ -516,14 +516,19 @@ export function LLMProviderRateLimitingTab({
       ? modeFromUrl
       : "global";
   const [providerMode, setProviderMode] = useState<"global" | "resourceWise">(initialMode);
-  const [providerGlobalCriteria, setProviderGlobalCriteria] = useState<CriteriaState>(DEFAULT_CRITERIA);
-  const [providerResourceWiseDefault, setProviderResourceWiseDefault] = useState<CriteriaState>(DEFAULT_CRITERIA);
-  const [providerResourceWiseMap, setProviderResourceWiseMap] = useState<Record<string, CriteriaState>>({});
+  const [providerGlobalCriteria, setProviderGlobalCriteria] =
+    useState<CriteriaState>(DEFAULT_CRITERIA);
+  const [providerResourceWiseDefault, setProviderResourceWiseDefault] =
+    useState<CriteriaState>(DEFAULT_CRITERIA);
+  const [providerResourceWiseMap, setProviderResourceWiseMap] =
+    useState<Record<string, CriteriaState>>({});
   const [resourceSearch, setResourceSearch] = useState("");
   const [expandedResources, setExpandedResources] = useState<Set<string>>(new Set());
-  const [criteriaFieldErrors, setCriteriaFieldErrors] = useState<Record<string, Record<string, string>>>({});
+  const [criteriaFieldErrors, setCriteriaFieldErrors] =
+    useState<Record<string, Record<string, string>>>({});
 
-  const [consumerGlobalCriteria, setConsumerGlobalCriteria] = useState<CriteriaState>(DEFAULT_CRITERIA);
+  const [consumerGlobalCriteria, setConsumerGlobalCriteria] =
+    useState<CriteriaState>(DEFAULT_CRITERIA);
 
   const hasProviderGlobalConfig = useMemo(
     () => hasConfiguredCriteria(providerGlobalCriteria),
@@ -549,7 +554,12 @@ export function LLMProviderRateLimitingTab({
       resourceWise: { default: defaultLimit, resources: resourcesPayload },
       consumerGlobal: limitFromCriteria(consumerGlobalCriteria),
     });
-  }, [providerGlobalCriteria, providerResourceWiseDefault, providerResourceWiseMap, consumerGlobalCriteria]);
+  }, [
+    providerGlobalCriteria,
+    providerResourceWiseDefault,
+    providerResourceWiseMap,
+    consumerGlobalCriteria,
+  ]);
 
   const loadFromProvider = useCallback(() => {
     if (!providerData) return;
@@ -635,7 +645,10 @@ export function LLMProviderRateLimitingTab({
   useEffect(() => { setResourcePage(0); }, [filteredResources]);
 
   const pagedResources = useMemo(
-    () => filteredResources.slice(resourcePage * RESOURCES_PER_PAGE, (resourcePage + 1) * RESOURCES_PER_PAGE),
+    () => filteredResources.slice(
+      resourcePage * RESOURCES_PER_PAGE,
+      (resourcePage + 1) * RESOURCES_PER_PAGE,
+    ),
     [filteredResources, resourcePage],
   );
 
@@ -675,7 +688,9 @@ export function LLMProviderRateLimitingTab({
           if (blockKey.startsWith("resourceWise-") && blockKey !== "resourceWise-default") {
             const resKey = blockKey.replace("resourceWise-", "");
             setExpandedResources((prev) => new Set(prev).add(resKey));
-            const resIndex = filteredResources.findIndex((r) => getRateLimitResourceKey(r) === resKey);
+            const resIndex = filteredResources.findIndex(
+              (r) => getRateLimitResourceKey(r) === resKey,
+            );
             if (resIndex >= 0) setResourcePage(Math.floor(resIndex / RESOURCES_PER_PAGE));
           }
         }
@@ -693,7 +708,10 @@ export function LLMProviderRateLimitingTab({
         .map(([res, c]) => ({ resource: res, limit: limitFromCriteria(c) }));
       return {
         global: undefined,
-        resourceWise: { default: limitFromCriteria(providerResourceWiseDefault), resources: resourcesPayload },
+        resourceWise: {
+          default: limitFromCriteria(providerResourceWiseDefault),
+          resources: resourcesPayload,
+        },
       };
     };
 
@@ -701,7 +719,10 @@ export function LLMProviderRateLimitingTab({
       await onUpdate({
         rateLimiting: {
           providerLevel: buildProviderLevel(),
-          consumerLevel: { global: limitFromCriteria(consumerGlobalCriteria), resourceWise: undefined },
+          consumerLevel: {
+            global: limitFromCriteria(consumerGlobalCriteria),
+            resourceWise: undefined,
+          },
         },
       });
       setStatus({ message: "Rate limits updated successfully.", severity: "success" });
@@ -853,7 +874,9 @@ export function LLMProviderRateLimitingTab({
               ) : filteredResources.length === 0 ? (
                 <ListingTable.Container>
                   <ListingTable.EmptyState
-                    illustration={resourceSearch.trim() ? <Search size={64} /> : <FileCode size={64} />}
+                    illustration={
+                      resourceSearch.trim() ? <Search size={64} /> : <FileCode size={64} />
+                    }
                     title={resourceSearch.trim() ? "No resources match your search" : "No resources found"}
                     description={
                       resourceSearch.trim()
@@ -940,7 +963,9 @@ export function LLMProviderRateLimitingTab({
       {innerTab === 1 && (
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            Limits applied per agent (consumer). Each connected agent gets its own independent quota — enabling a criterion here prevents any single agent from exhausting the shared provider limit.
+            Limits applied per agent (consumer). Each connected agent gets its own independent
+            quota — enabling a criterion here prevents any single agent from exhausting the
+            shared provider limit.
           </Typography>
           <CriteriaBlock
             criteria={consumerGlobalCriteria}

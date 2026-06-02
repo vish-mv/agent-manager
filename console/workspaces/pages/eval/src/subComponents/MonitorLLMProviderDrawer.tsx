@@ -45,12 +45,16 @@ import {
 import {
   Check,
   Circle,
+  Coins,
   DoorClosedLocked,
   ExternalLink,
+  Hash,
+  Info,
   Plus,
+  Zap,
 } from "@wso2/oxygen-ui-icons-react";
 import { formatDistanceToNow } from "date-fns";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generatePath, useParams } from "react-router-dom";
 import debounce from "lodash/debounce";
 
@@ -74,19 +78,97 @@ function getLatestDeployment(
   );
 }
 
-function getRateLimitingSummary(
-  rateLimiting: CatalogLLMProviderEntry["rateLimiting"],
-): string {
-  if (!rateLimiting) return "Not configured";
-  const limits: string[] = [];
-  const pl = rateLimiting.providerLevel;
-  const cl = rateLimiting.consumerLevel;
-  if (pl?.requestLimitCount) limits.push(`${pl.requestLimitCount} req/min`);
-  if (pl?.tokenLimitCount) limits.push(`${pl.tokenLimitCount} tokens/min`);
-  if (cl?.requestLimitCount)
-    limits.push(`Consumer: ${cl.requestLimitCount} req/min`);
-  return limits.length > 0 ? limits.join(", ") : "Configured";
+function formatCost(amount: number): string {
+  if (amount < 0.01) return `$${amount.toFixed(6)}`;
+  return `$${amount.toFixed(2)}`;
 }
+
+function formatResetWindow(duration?: number, unit?: string): string {
+  if (!unit) return "";
+  const abbrev: Record<string, string> = { minute: "min", hour: "hr", day: "day" };
+  const u = abbrev[unit.toLowerCase()] ?? unit;
+  return duration && duration !== 1 ? `${duration} ${u}` : u;
+}
+
+const RateLimitDisplay: React.FC<{ rateLimiting?: CatalogLLMProviderEntry["rateLimiting"] }> = ({ rateLimiting }) => {
+  if (!rateLimiting) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Rate Limiting: <Typography component="span" variant="body2" color="text.disabled">Not configured</Typography>
+      </Typography>
+    );
+  }
+
+  const cl = rateLimiting.consumerLevel;
+  const pl = rateLimiting.providerLevel;
+
+  const consumerEnabled = cl?.globalEnabled ?? false;
+  const consumerHasLimits =
+    consumerEnabled && (cl?.request != null || cl?.token != null || cl?.cost != null);
+
+  if (!consumerEnabled && !pl?.globalEnabled) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Rate Limiting: <Typography component="span" variant="body2" color="text.disabled">Configured (disabled)</Typography>
+      </Typography>
+    );
+  }
+
+  const limitScope = consumerHasLimits ? cl : pl;
+  const isOrgWide = consumerEnabled && !consumerHasLimits;
+
+  const limits: { icon: React.ReactNode; label: string; value: string }[] = [];
+  if (limitScope?.request) {
+    const w = formatResetWindow(limitScope.request.resetDuration, limitScope.request.resetUnit);
+    limits.push({ icon: <Zap size={12} />, label: "Requests", value: `${limitScope.request.limit.toLocaleString()}${w ? `/${w}` : ""}` });
+  }
+  if (limitScope?.token) {
+    const w = formatResetWindow(limitScope.token.resetDuration, limitScope.token.resetUnit);
+    limits.push({ icon: <Hash size={12} />, label: "Tokens", value: `${limitScope.token.limit.toLocaleString()}${w ? `/${w}` : ""}` });
+  }
+  if (limitScope?.cost) {
+    const w = formatResetWindow(limitScope.cost.resetDuration, limitScope.cost.resetUnit);
+    limits.push({ icon: <Coins size={12} />, label: "Budget", value: `${formatCost(limitScope.cost.limit)}${w ? `/${w}` : ""}` });
+  }
+
+  return (
+    <Stack spacing={0.5}>
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <Typography variant="caption" color="text.secondary">
+          {isOrgWide ? "Your Quota (org-wide limit):" : "Your Quota:"}
+        </Typography>
+        {isOrgWide && (
+          <Tooltip
+            title="No per-consumer limit is configured. The org-wide provider limit applies to all consumers."
+            placement="top"
+            arrow
+          >
+            <Box component="span" sx={{ display: "inline-flex", alignItems: "center", color: "text.secondary", cursor: "default" }}>
+              <Info size={12} />
+            </Box>
+          </Tooltip>
+        )}
+      </Stack>
+      {limits.length > 0 ? (
+        <Stack direction="row" spacing={0.75} flexWrap="wrap">
+          {limits.map(({ icon, label, value }) => (
+            <Chip
+              key={label}
+              icon={<Box component="span" sx={{ display: "inline-flex", alignItems: "center", pl: 0.5 }}>{icon}</Box>}
+              label={`${label}: ${value}`}
+              size="small"
+              variant="outlined"
+              color={isOrgWide ? "default" : "primary"}
+              sx={{ fontVariantNumeric: "tabular-nums" }}
+            />
+          ))}
+        </Stack>
+      ) : (
+        <Typography variant="body2" color="text.secondary">Enabled (no numeric limits set)</Typography>
+      )}
+    </Stack>
+  );
+};
 
 interface ProviderCardContentProps {
   entry: CatalogLLMProviderEntry;
@@ -100,7 +182,6 @@ function ProviderCardContent({
   templateInfo,
 }: ProviderCardContentProps) {
   const latest = getLatestDeployment(entry.deployments);
-  const rateLimitingText = getRateLimitingSummary(entry.rateLimiting);
 
   return (
     <Stack direction="row" spacing={2} flexGrow={1} alignItems="center">
@@ -116,7 +197,7 @@ function ProviderCardContent({
         {isSelected ? <Check size={16} /> : <Circle size={16} />}
       </Avatar>
       <Stack spacing={0.25} flexGrow={1}>
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={0.25} alignItems="center">
           <Typography variant="h6">{entry.name}&nbsp;</Typography>
           {templateInfo && (
             <Tooltip title="Provider template" placement="top" arrow>
@@ -141,22 +222,12 @@ function ProviderCardContent({
         {latest?.deployedAt && (
           <Typography variant="caption" color="text.secondary">
             Deployed{" "}
-            {formatDistanceToNow(new Date(latest.deployedAt), {
-              addSuffix: true,
-            })}
+            {formatDistanceToNow(new Date(latest.deployedAt), { addSuffix: true })}
           </Typography>
         )}
-        <Stack direction="column" spacing={0.25} sx={{ mt: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">
-            Rate Limiting:{" "}
-            <Typography
-              component="span"
-              variant="body2"
-              color={entry.rateLimiting ? "text.primary" : "text.disabled"}
-            >
-              {rateLimitingText}
-            </Typography>
-          </Typography>
+        <Divider orientation="vertical" />
+        <Stack direction="column" spacing={0.5}>
+          <RateLimitDisplay rateLimiting={entry.rateLimiting} />
           <Typography variant="caption" color="text.secondary">
             Guardrails:{" "}
             <Typography
@@ -165,25 +236,14 @@ function ProviderCardContent({
               color={entry.policies?.length ? "text.primary" : "text.disabled"}
             >
               {entry.policies?.length ? (
-                <Stack
-                  component="span"
-                  direction="row"
-                  spacing={0.25}
-                  flexWrap="wrap"
-                  alignItems="center"
-                  sx={{ display: "inline-flex" }}
-                >
+                <Stack direction="row" spacing={0.25} flexWrap="wrap" alignItems="center">
                   {entry.policies.slice(0, 3).map((p) => (
                     <Chip key={p} label={p} size="small" variant="outlined" />
                   ))}
                   {entry.policies.length > 3 && (
-                    <Tooltip
-                      title={entry.policies.join(", ")}
-                      placement="top"
-                      arrow
-                    >
+                    <Tooltip title={entry.policies.join(", ")} placement="top" arrow>
                       <Typography variant="caption" color="text.secondary">
-                        {`+${entry.policies.length - 3} more`}
+                        {` +${entry.policies.length - 3} more..`}
                       </Typography>
                     </Tooltip>
                   )}

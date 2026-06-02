@@ -47,11 +47,16 @@ import {
   Check,
   ChevronDown,
   Circle,
+  Coins,
   DoorClosedLocked,
+  ExternalLink,
+  Hash,
+  Info,
   Link,
   Plus,
   Search,
   Trash2,
+  Zap,
 } from "@wso2/oxygen-ui-icons-react";
 import { formatDistanceToNow } from "date-fns";
 import { useParams, useNavigate, generatePath } from "react-router-dom";
@@ -94,6 +99,100 @@ function getLatestDeployment(
       new Date(b.deployedAt ?? 0).getTime() - new Date(a.deployedAt ?? 0).getTime(),
   )[0] ?? null;
 }
+
+function formatCost(amount: number): string {
+  if (amount < 0.01) return `$${amount.toFixed(6)}`;
+  return `$${amount.toFixed(2)}`;
+}
+
+function formatResetWindow(duration?: number, unit?: string): string {
+  if (!unit) return "";
+  const abbrev: Record<string, string> = { minute: "min", hour: "hr", day: "day" };
+  const u = abbrev[unit.toLowerCase()] ?? unit;
+  return duration && duration !== 1 ? `${duration} ${u}` : u;
+}
+
+const RateLimitDisplay: React.FC<{
+  rateLimiting?: CatalogRateLimitingSummary;
+}> = ({ rateLimiting }) => {
+  if (!rateLimiting) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Rate Limiting: <Typography component="span" variant="body2" color="text.disabled">Not configured</Typography>
+      </Typography>
+    );
+  }
+
+  const cl = rateLimiting.consumerLevel;
+  const pl = rateLimiting.providerLevel;
+
+  const consumerEnabled = cl?.globalEnabled ?? false;
+  const consumerHasLimits =
+    consumerEnabled && (cl?.request != null || cl?.token != null || cl?.cost != null);
+
+  if (!consumerEnabled && !pl?.globalEnabled) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Rate Limiting: <Typography component="span" variant="body2" color="text.disabled">Configured (disabled)</Typography>
+      </Typography>
+    );
+  }
+
+  const limitScope = consumerHasLimits ? cl : pl;
+  const isOrgWide = consumerEnabled && !consumerHasLimits;
+
+  const limits: { icon: React.ReactNode; label: string; value: string }[] = [];
+  if (limitScope?.request) {
+    const w = formatResetWindow(limitScope.request.resetDuration, limitScope.request.resetUnit);
+    limits.push({ icon: <Zap size={12} />, label: "Requests", value: `${limitScope.request.limit.toLocaleString()}${w ? `/${w}` : ""}` });
+  }
+  if (limitScope?.token) {
+    const w = formatResetWindow(limitScope.token.resetDuration, limitScope.token.resetUnit);
+    limits.push({ icon: <Hash size={12} />, label: "Tokens", value: `${limitScope.token.limit.toLocaleString()}${w ? `/${w}` : ""}` });
+  }
+  if (limitScope?.cost) {
+    const w = formatResetWindow(limitScope.cost.resetDuration, limitScope.cost.resetUnit);
+    limits.push({ icon: <Coins size={12} />, label: "Budget", value: `${formatCost(limitScope.cost.limit)}${w ? `/${w}` : ""}` });
+  }
+
+  return (
+    <Stack spacing={0.5}>
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <Typography variant="caption" color="text.secondary">
+          {isOrgWide ? "Your Quota (org-wide limit):" : "Your Quota:"}
+        </Typography>
+        {isOrgWide && (
+          <Tooltip
+            title="No per-consumer limit is configured. The org-wide provider limit applies to all consumers."
+            placement="top"
+            arrow
+          >
+            <Box component="span" sx={{ display: "inline-flex", alignItems: "center", color: "text.secondary", cursor: "default" }}>
+              <Info size={12} />
+            </Box>
+          </Tooltip>
+        )}
+      </Stack>
+      {limits.length > 0 ? (
+        <Stack direction="row" spacing={0.75} flexWrap="wrap">
+          {limits.map(({ icon, label, value }) => (
+            <Chip
+              key={label}
+              icon={<Box component="span" sx={{ display: "inline-flex", alignItems: "center", pl: 0.5 }}>{icon}</Box>}
+              label={`${label}: ${value}`}
+              size="small"
+              variant="outlined"
+              color={isOrgWide ? "default" : "primary"}
+              sx={{ fontVariantNumeric: "tabular-nums" }}
+            />
+          ))}
+        </Stack>
+      ) : (
+        <Typography variant="body2" color="text.secondary">Enabled (no numeric limits set)</Typography>
+      )}
+    </Stack>
+  );
+};
 
 const ProviderDisplay: React.FC<{
   provider: ProviderInfo | null;
@@ -143,27 +242,8 @@ const ProviderDisplay: React.FC<{
           </Typography>
         )}
         <Divider orientation="vertical" />
-        <Stack direction="column" spacing={0.25}>
-          <Typography variant="caption" color="text.secondary">
-            Rate Limiting:{" "}
-            <Typography
-              component="span"
-              variant="body2"
-              color={provider?.rateLimiting ? "text.primary" : "text.disabled"}
-            >
-              {provider?.rateLimiting
-                ? (() => {
-                  const limits: string[] = [];
-                  const pl = provider.rateLimiting.providerLevel;
-                  const cl = provider.rateLimiting.consumerLevel;
-                  if (pl?.request?.limit) limits.push(`${pl.request.limit} req/${pl.request.resetUnit ?? "min"}`);
-                  if (pl?.token?.limit) limits.push(`${pl.token.limit} tokens/${pl.token.resetUnit ?? "min"}`);
-                  if (cl?.request?.limit) limits.push(`Consumer: ${cl.request.limit} req/${cl.request.resetUnit ?? "min"}`);
-                  return limits.length > 0 ? limits.join(", ") : "Configured";
-                })()
-                : "Not configured"}
-            </Typography>
-          </Typography>
+        <Stack direction="column" spacing={0.5}>
+          <RateLimitDisplay rateLimiting={provider?.rateLimiting} />
           <Typography variant="caption" color="text.secondary">
             Guardrails:{" "}
             <Typography
@@ -727,6 +807,36 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
                 });
               })()}
             </Stack>
+            {orgId && (
+              <>
+                <Divider sx={{ mt: 2 }} />
+                <Box
+                  component="a"
+                  href={generatePath(
+                    absoluteRouteMap.children.org.children.llmProviders.children.add.path,
+                    { orgId },
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    pt: 1.5,
+                    color: "primary.main",
+                    textDecoration: "none",
+                    cursor: "pointer",
+                    "&:hover": { textDecoration: "underline" },
+                  }}
+                >
+                  <Plus size={16} />
+                  <Typography variant="body2" color="primary">
+                    Add LLM Provider
+                  </Typography>
+                  <ExternalLink size={14} />
+                </Box>
+              </>
+            )}
           </Stack>
         </DrawerContent>
       </DrawerWrapper>

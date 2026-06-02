@@ -125,7 +125,9 @@ function formatResetWindow(duration?: number, unit?: string): string {
   return duration && duration !== 1 ? `${duration} ${u}` : u;
 }
 
-const RateLimitDisplay: React.FC<{ rateLimiting?: CatalogRateLimitingSummary }> = ({ rateLimiting }) => {
+const RateLimitDisplay: React.FC<{
+  rateLimiting?: CatalogRateLimitingSummary;
+}> = ({ rateLimiting }) => {
   if (!rateLimiting) {
     return (
       <Typography variant="caption" color="text.secondary">
@@ -140,7 +142,8 @@ const RateLimitDisplay: React.FC<{ rateLimiting?: CatalogRateLimitingSummary }> 
   // Whether the consumer level is actively enabled (rate limiting applies to this consumer)
   const consumerEnabled = cl?.globalEnabled ?? false;
   // Whether the consumer level has its own per-consumer numeric limits configured
-  const consumerHasLimits = consumerEnabled && (cl?.request != null || cl?.token != null || cl?.cost != null);
+  const consumerHasLimits =
+    consumerEnabled && (cl?.request != null || cl?.token != null || cl?.cost != null);
 
   if (!consumerEnabled && !pl?.globalEnabled) {
     return (

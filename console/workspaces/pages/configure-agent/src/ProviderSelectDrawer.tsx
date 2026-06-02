@@ -16,13 +16,15 @@
  */
 
 import { useRef, useState } from "react";
+import { generatePath, useParams } from "react-router-dom";
+import { absoluteRouteMap } from "@agent-management-platform/types";
 import {
   DrawerContent,
   DrawerHeader,
   DrawerWrapper,
 } from "@agent-management-platform/views";
-import { Form, ListingTable, SearchBar, Stack, Typography } from "@wso2/oxygen-ui";
-import { Link, Search } from "@wso2/oxygen-ui-icons-react";
+import { Box, Divider, Form, ListingTable, SearchBar, Stack, Typography } from "@wso2/oxygen-ui";
+import { ExternalLink, Link, Plus, Search } from "@wso2/oxygen-ui-icons-react";
 import { ProviderDisplay } from "./AddLLMProvider.Component";
 
 export type ProviderOption = {
@@ -56,9 +58,17 @@ export const ProviderSelectDrawer: React.FC<ProviderSelectDrawerProps> = ({
   subtitle,
   onSelect,
 }) => {
+  const { orgId } = useParams<{ orgId: string }>();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const addProviderPath = orgId
+    ? generatePath(
+        absoluteRouteMap.children.org.children.llmProviders.children.add.path,
+        { orgId },
+      )
+    : null;
 
   const filtered = providers.filter((p) => {
     if (!debouncedSearch.trim()) return true;
@@ -139,6 +149,33 @@ export const ProviderSelectDrawer: React.FC<ProviderSelectDrawerProps> = ({
               })
             )}
           </Stack>
+          {addProviderPath && (
+            <>
+              <Divider sx={{ mt: 2 }} />
+              <Box
+                component="a"
+                href={addProviderPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  pt: 1.5,
+                  color: "primary.main",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  "&:hover": { textDecoration: "underline" },
+                }}
+              >
+                <Plus size={16} />
+                <Typography variant="body2" color="primary">
+                  Add LLM Provider
+                </Typography>
+                <ExternalLink size={14} />
+              </Box>
+            </>
+          )}
         </Stack>
       </DrawerContent>
     </DrawerWrapper>
