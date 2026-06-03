@@ -42,11 +42,15 @@ Fill in the agent creation form with these values:
 
 ### Step 4: Configure Environment Variables
 
-Add the following environment variable in the create form:
+Add the following environment variables in the create form:
 
 ```env
 OPENAI_API_KEY=<your-openai-api-key>
+HOME=/tmp
+CREWAI_STORAGE_DIR=/tmp/crewai
 ```
+
+`HOME` and `CREWAI_STORAGE_DIR` are required. CrewAI writes files under `$HOME` when it is first imported, and with auto-instrumentation enabled that import happens at process startup — before the app runs — while the build container's default `HOME` is read-only. Pointing both at a writable path (`/tmp`) avoids a `Read-only file system: '/nonexistent'` crash and the restart loop it causes.
 
 ### Step 5: Deploy the Agent
 
