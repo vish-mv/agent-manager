@@ -48,6 +48,11 @@ type AgentConfigurationService interface {
 	Update(ctx context.Context, configUUID uuid.UUID, orgName, projectName, agentName string,
 		req models.UpdateAgentModelConfigRequest) (*models.AgentModelConfigResponse, error)
 	Delete(ctx context.Context, configUUID uuid.UUID, orgName, projectName, agentName string) error
+	// DeleteForAgentDeletion removes all external proxy resources for a single LLM config during
+	// agent deletion. It skips OC Component/Workload/ReleaseBinding env-var patching and
+	// SecretReference CR deletion because the component itself is being torn down. isExternalAgent
+	// must be resolved once by the caller to avoid a GetComponent call per config.
+	DeleteForAgentDeletion(ctx context.Context, configUUID uuid.UUID, orgName, projectName, agentName string, isExternalAgent bool) error
 	// ListAgentLLMConfigSecretReferences returns the set of SecretReference names persisted in the
 	// DB for all LLM configurations of this agent in the given environment. Used during deploy to
 	// identify which component env var secretRefs are system-managed (LLM config) vs user-provided.
@@ -1867,6 +1872,162 @@ func (s *agentConfigurationService) Delete(ctx context.Context, configUUID uuid.
 		"environmentCount", len(mappings),
 	)
 
+	return nil
+}
+
+// DeleteForAgentDeletion cleans up all external proxy resources for a single LLM config as part
+// of agent deletion. Compared to Delete, it skips:
+//   - GetComponent (caller resolves isExternalAgent once for all configs)
+//   - SecretReference CR deletion (component teardown handles it)
+//   - Component/Workload/ReleaseBinding env-var patching (component is being deleted)
+//
+// Steps retained: revoke API keys → undeploy proxy deployments → delete proxy record → delete KV secret → delete DB record.
+// Best-effort: individual step failures are logged but do not abort the overall agent deletion.
+func (s *agentConfigurationService) DeleteForAgentDeletion(ctx context.Context, configUUID uuid.UUID, orgName, projectName, agentName string, isExternalAgent bool) error {
+	existingConfig, err := s.agentConfigRepo.GetByUUID(ctx, configUUID, orgName)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return utils.ErrAgentConfigNotFound
+		}
+		return fmt.Errorf("failed to get configuration: %w", err)
+	}
+
+	if existingConfig.ProjectName != projectName || existingConfig.AgentID != agentName {
+		return utils.ErrAgentConfigNotFound
+	}
+
+	s.logger.Info("Deleting agent configuration for agent deletion", "configUUID", existingConfig.UUID, "name", existingConfig.Name)
+
+	mappings, err := s.envMappingRepo.ListByConfig(ctx, configUUID)
+	if err != nil {
+		return fmt.Errorf("failed to list environment mappings: %w", err)
+	}
+
+	environments, err := s.ocClient.ListEnvironments(ctx, orgName)
+	if err != nil {
+		return fmt.Errorf("failed to list environments: %w", err)
+	}
+	envIDNameMap := make(map[string]string, len(environments))
+	for _, env := range environments {
+		envIDNameMap[env.UUID] = env.Name
+	}
+
+	var cleanupErrs []string
+	for _, mapping := range mappings {
+		if mapping.LLMProxy == nil {
+			continue
+		}
+		env, ok := envIDNameMap[mapping.EnvironmentUUID.String()]
+		if !ok {
+			s.logger.Warn("environment not available in openchoreo, skipping mapping", "environmentUUID", mapping.EnvironmentUUID)
+			continue
+		}
+
+		proxyHandle := mapping.LLMProxy.Configuration.Name
+		proxyKeyName := fmt.Sprintf("%s-key", strings.TrimSuffix(proxyHandle, "-proxy"))
+		providerKeyName := proxyHandle
+
+		// Step 1: Revoke proxy API key. ErrLLMProxyNotFound means already gone — idempotent.
+		if err := s.llmProxyAPIKeyService.RevokeAPIKey(ctx, orgName, proxyHandle, proxyKeyName); err != nil {
+			if !errors.Is(err, utils.ErrLLMProxyNotFound) {
+				s.logger.Warn("Failed to revoke proxy API key during agent deletion",
+					"proxyHandle", proxyHandle, "keyName", proxyKeyName, "error", err)
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("revoke proxy key %s: %v", proxyKeyName, err))
+			}
+		}
+
+		// Step 2: Revoke provider API key (only if provider auth was configured).
+		// ErrLLMProviderNotFound means already gone — idempotent.
+		if mapping.LLMProxy.Configuration.UpstreamAuth != nil {
+			providerUUID := mapping.LLMProxy.ProviderUUID.String()
+			if err := s.llmProviderAPIKeyService.RevokeAPIKey(ctx, orgName, providerUUID, providerKeyName); err != nil {
+				if !errors.Is(err, utils.ErrLLMProviderNotFound) {
+					s.logger.Warn("Failed to revoke provider API key during agent deletion",
+						"providerUUID", providerUUID, "keyName", providerKeyName, "error", err)
+					cleanupErrs = append(cleanupErrs, fmt.Sprintf("revoke provider key %s: %v", providerKeyName, err))
+				}
+			}
+		}
+
+		// Step 3: Undeploy proxy deployments.
+		deployments, err := s.llmProxyDeploymentService.GetLLMProxyDeployments(proxyHandle, orgName, nil, nil)
+		if err != nil {
+			if !errors.Is(err, utils.ErrLLMProxyNotFound) {
+				s.logger.Warn("Failed to get proxy deployments during agent deletion",
+					"proxyHandle", proxyHandle, "error", err)
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("get deployments for proxy %s: %v", proxyHandle, err))
+			}
+		} else {
+			for _, dep := range deployments {
+				if _, err := s.llmProxyDeploymentService.UndeployLLMProxyDeployment(proxyHandle, dep.DeploymentID.String(), dep.GatewayUUID.String(), orgName); err != nil {
+					s.logger.Warn("Failed to undeploy proxy deployment during agent deletion",
+						"proxyHandle", proxyHandle, "deploymentID", dep.DeploymentID, "error", err)
+					cleanupErrs = append(cleanupErrs, fmt.Sprintf("undeploy %s deployment %s: %v", proxyHandle, dep.DeploymentID, err))
+				}
+			}
+		}
+
+		// Step 4: Delete proxy record.
+		if err := s.llmProxyService.Delete(proxyHandle, orgName); err != nil {
+			if !errors.Is(err, utils.ErrLLMProxyNotFound) {
+				s.logger.Warn("Failed to delete proxy record during agent deletion",
+					"proxyHandle", proxyHandle, "error", err)
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("delete proxy %s: %v", proxyHandle, err))
+			}
+		}
+
+		// Step 5: Delete KV secret for proxy API key. Load the persisted SecretReference name
+		// from DB so DeleteSecret receives the correct name even if recomputation would differ.
+		var persistedSecretRefName string
+		vars, varLoadErr := s.envVariableRepo.ListByConfigAndEnv(ctx, configUUID, mapping.EnvironmentUUID)
+		if varLoadErr != nil {
+			s.logger.Warn("failed to load env config variables for KV secret deletion", "err", varLoadErr)
+		} else {
+			for _, v := range vars {
+				if v.SecretReference != "" {
+					persistedSecretRefName = v.SecretReference
+					break
+				}
+			}
+		}
+
+		proxySecretLoc := secretmanagersvc.SecretLocation{
+			OrgName:         existingConfig.OrganizationName,
+			ProjectName:     existingConfig.ProjectName,
+			AgentName:       existingConfig.AgentID,
+			EnvironmentName: env,
+			ConfigName:      existingConfig.Name,
+			EntityName:      proxyHandle,
+			SecretKey:       secretmanagersvc.SecretKeyAPIKey,
+		}
+		secretRefForDelete := persistedSecretRefName
+		if secretRefForDelete == "" {
+			secretRefForDelete = proxySecretLoc.SecretRefName()
+		}
+		if err := s.secretClient.DeleteSecret(ctx, proxySecretLoc, secretRefForDelete); err != nil {
+			s.logger.Warn("Failed to delete proxy API key from KV during agent deletion",
+				"proxyHandle", proxyHandle, "error", err)
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("delete KV secret for proxy %s: %v", proxyHandle, err))
+		}
+	}
+
+	// Step 6: Delete DB record only when all external resources were cleaned up successfully.
+	// If any step above failed, return an error so the DB row is preserved and the caller
+	// (deleteAgentLLMConfigurations) can log it — the row will be retried on the next
+	// agent deletion attempt via the idempotent delete path.
+	if len(cleanupErrs) > 0 {
+		return fmt.Errorf("external cleanup incomplete for config %s, DB record preserved for retry: %s",
+			configUUID, strings.Join(cleanupErrs, "; "))
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		return s.agentConfigRepo.Delete(ctx, tx, configUUID, orgName)
+	}); err != nil {
+		return fmt.Errorf("failed to delete configuration from DB: %w", err)
+	}
+
+	s.logger.Info("Agent configuration deleted for agent deletion",
+		"configUUID", configUUID, "configName", existingConfig.Name, "orgName", orgName)
 	return nil
 }
 

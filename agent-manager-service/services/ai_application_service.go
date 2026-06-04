@@ -135,14 +135,24 @@ func (s *AIApplicationService) Delete(ctx context.Context, orgName, projectName,
 	return nil
 }
 
-// DeleteAllByAgent removes all AIApplication records for the given agent in one DB call.
-// Called during agent deletion after all per-config resources have been cleaned up.
-// Gateway sync on reconnect handles the state via the bulk-sync endpoint.
-func (s *AIApplicationService) DeleteAllByAgent(ctx context.Context, orgName, agentID string) error {
-	if err := s.appRepo.DeleteByAgent(ctx, orgName, agentID); err != nil {
+// DeleteAllByAgent removes all AIApplication records for the given org+project+agent and
+// broadcasts deletion to all gateways so they revoke the applications immediately without
+// waiting for a reconnect-triggered bulk-sync.
+func (s *AIApplicationService) DeleteAllByAgent(ctx context.Context, orgName, projectName, agentID string) error {
+	apps, err := s.appRepo.ListByAgent(ctx, orgName, projectName, agentID)
+	if err != nil {
+		return fmt.Errorf("failed to list AI applications for agent %q in org %q: %w", agentID, orgName, err)
+	}
+
+	if err := s.appRepo.DeleteByAgent(ctx, orgName, projectName, agentID); err != nil {
 		return fmt.Errorf("failed to delete AI applications for agent %q in org %q: %w", agentID, orgName, err)
 	}
-	s.logger.Info("Deleted all AI applications for agent", "agentID", agentID, "orgName", orgName)
+
+	for i := range apps {
+		s.broadcastDeletionToAllGateways(ctx, orgName, &apps[i])
+	}
+
+	s.logger.Info("Deleted all AI applications for agent", "agentID", agentID, "projectName", projectName, "orgName", orgName, "count", len(apps))
 	return nil
 }
 
