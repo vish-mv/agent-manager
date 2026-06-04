@@ -50,6 +50,15 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
+def _safe_request_error(e: Exception) -> str:
+    """Return a URL-free description of a requests exception for safe logging."""
+    import requests as _requests
+
+    if isinstance(e, _requests.HTTPError) and e.response is not None:
+        return f"HTTP {e.response.status_code}"
+    return type(e).__name__
+
+
 def _parse_timestamp(raw_timestamp: Any) -> Optional[datetime]:
     """Parse timestamp from various formats."""
     if raw_timestamp is None:
@@ -450,7 +459,7 @@ class TraceFetcher:
             return [_parse_trace(t) for t in traces_data]
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch traces: {e}")
+            logger.error("Failed to fetch traces: %s", _safe_request_error(e))
             raise
 
     def fetch_trace_by_id(self, trace_id: str) -> Optional[OTELTrace]:
@@ -506,7 +515,7 @@ class TraceFetcher:
             )
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch trace {trace_id}: {e}")
+            logger.error("Failed to fetch trace %s: %s", trace_id, _safe_request_error(e))
             return None
 
     def health_check(self) -> bool:

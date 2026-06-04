@@ -81,7 +81,11 @@ class OAuth2TokenManager:
             headers={"Authorization": f"Basic {auth}"},
             timeout=10,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "unknown"
+            raise requests.HTTPError(f"Token request failed: HTTP {status}") from None
         data = response.json()
         self._token = data["access_token"]
         self._expires_at = time.time() + data.get("expires_in", 3600)
@@ -540,7 +544,7 @@ def main() -> None:
         logger.info("Configured LiteLLM to route through OpenAI-compatible gateway at %s", llm_api_base)
 
     logger.info(
-        "Starting monitor evaluation monitor=%s organization=%s project=%s agent=%s env=%s time_range=%s..%s sampling=%.1f endpoint=%s",
+        "Starting monitor evaluation monitor=%s organization=%s project=%s agent=%s env=%s time_range=%s..%s sampling=%.1f",
         args.monitor_name,
         args.organization,
         args.project,
@@ -549,7 +553,6 @@ def main() -> None:
         args.trace_start,
         args.trace_end,
         args.sampling_rate,
-        args.traces_api_endpoint,
     )
 
     # Validate time formats

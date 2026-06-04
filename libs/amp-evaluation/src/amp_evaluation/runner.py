@@ -44,7 +44,7 @@ from abc import ABC, abstractmethod
 import logging
 
 from .trace import Trace, parse_trace_for_evaluation, TraceFetcher, TraceLoader
-from .trace.fetcher import OTELTrace
+from .trace.fetcher import OTELTrace, _safe_request_error
 from .evaluators.base import BaseEvaluator, validate_unique_evaluator_names
 from .evaluators.params import EvalMode
 from .models import EvaluatorSummary, EvaluatorScore, TaskContext
@@ -709,11 +709,12 @@ class Experiment(BaseRunner):
                     )
 
         except ValueError as e:
-            logger.warning(f"Cannot fetch traces: {e}")
+            logger.warning("Cannot fetch traces: %s", e)
             errors.append(f"Trace fetching failed: {e}")
         except Exception as e:
-            logger.error(f"Error during trace fetching: {e}", exc_info=True)
-            errors.append(f"Trace fetching error: {e}")
+            safe = _safe_request_error(e)
+            logger.error("Error during trace fetching: %s", safe, exc_info=True)
+            errors.append(f"Trace fetching error: {safe}")
 
         return errors
 
@@ -780,7 +781,7 @@ class Monitor(BaseRunner):
                         continue
 
             except Exception as e:
-                error_msg = f"Failed to fetch traces: {e}"
+                error_msg = f"Failed to fetch traces: {_safe_request_error(e)}"
                 logger.error(error_msg, exc_info=True)
 
                 from .dataset import generate_id
