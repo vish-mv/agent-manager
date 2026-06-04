@@ -202,6 +202,19 @@ def test_gateway_kwargs_bedrock_injects_header_via_boto3_client():
     assert req.headers["api-key"] == "secret-key"
 
 
+def test_close_gateway_client_closes_mistral_async_client():
+    httpx = pytest.importorskip("httpx")
+    client = httpx.AsyncClient()
+    LLMAsJudgeEvaluator._close_gateway_client({"client_args": {"async_client": client}})
+    assert client.is_closed
+
+
+def test_close_gateway_client_is_noop_without_a_client():
+    # Providers that use default_headers (no async_client/client) must not error.
+    LLMAsJudgeEvaluator._close_gateway_client({"client_args": {"default_headers": {"api-key": "x"}}})
+    LLMAsJudgeEvaluator._close_gateway_client({})
+
+
 def test_gateway_kwargs_supports_colon_separator():
     _set_gateway()
     kw = LLMAsJudgeEvaluator._gateway_kwargs("gemini:gemini-2.5-flash")

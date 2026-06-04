@@ -702,40 +702,70 @@ The "explanation" field MUST be formatted as valid Markdown. Use headings, bulle
 
         gateway_kwargs = self._gateway_kwargs(self.model)
 
-        last_error = None
-        for attempt in range(self.max_retries + 1):
-            retry_ctx = ""
-            if last_error and attempt > 0:
-                retry_ctx = (
-                    f"\n\n[IMPORTANT: Your previous response was invalid: {last_error}. "
-                    f"You MUST respond with ONLY a JSON object containing exactly two fields:\n"
-                    f'{{"explanation": "<your analysis>", "score": <float between 0.0 and 1.0>}}\n'
-                    f"The 'score' MUST be a top-level numeric field in the JSON, NOT embedded in the explanation text.]"
-                )
+        try:
+            last_error = None
+            for attempt in range(self.max_retries + 1):
+                retry_ctx = ""
+                if last_error and attempt > 0:
+                    retry_ctx = (
+                        f"\n\n[IMPORTANT: Your previous response was invalid: {last_error}. "
+                        f"You MUST respond with ONLY a JSON object containing exactly two fields:\n"
+                        f'{{"explanation": "<your analysis>", "score": <float between 0.0 and 1.0>}}\n'
+                        f"The 'score' MUST be a top-level numeric field in the JSON, NOT embedded in the explanation text.]"
+                    )
 
+                try:
+                    response = completion(
+                        model=self.model,
+                        messages=[{"role": "user", "content": prompt + retry_ctx}],
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                        response_format=JudgeOutput,
+                        **gateway_kwargs,
+                    )
+                except Exception as e:
+                    last_error = str(e)
+                    continue
+
+                content = response.choices[0].message.content
+                result, error = self._parse_and_validate(content)
+                if result is not None:
+                    return result
+                last_error = error
+
+            # All retries exhausted — this is an infrastructure failure, not a genuine score
+            return EvalResult.skip(
+                f"LLM judge failed after {self.max_retries + 1} attempts: {last_error} [model={self.model}]"
+            )
+        finally:
+            self._close_gateway_client(gateway_kwargs)
+
+    @staticmethod
+    def _close_gateway_client(gateway_kwargs: dict) -> None:
+        """Release any per-call client built for gateway routing.
+
+        The Mistral path supplies a custom ``httpx.AsyncClient`` and the Bedrock
+        path a boto3 client; any-llm does not take ownership of either, so they
+        must be closed here to avoid leaking sockets across repeated judge runs.
+        """
+        client_args = gateway_kwargs.get("client_args") or {}
+
+        async_client = client_args.get("async_client")
+        if async_client is not None:
             try:
-                response = completion(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt + retry_ctx}],
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    response_format=JudgeOutput,
-                    **gateway_kwargs,
-                )
-            except Exception as e:
-                last_error = str(e)
-                continue
+                import asyncio
 
-            content = response.choices[0].message.content
-            result, error = self._parse_and_validate(content)
-            if result is not None:
-                return result
-            last_error = error
+                asyncio.run(async_client.aclose())
+            except Exception:
+                pass
 
-        # All retries exhausted — this is an infrastructure failure, not a genuine score
-        return EvalResult.skip(
-            f"LLM judge failed after {self.max_retries + 1} attempts: {last_error} [model={self.model}]"
-        )
+        boto_client = client_args.get("client")
+        close = getattr(boto_client, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
 
     def _parse_and_validate(self, content: str) -> Tuple[Optional[EvalResult], Optional[str]]:
         """
