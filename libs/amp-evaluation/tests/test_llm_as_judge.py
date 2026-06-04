@@ -17,7 +17,7 @@
 """
 Tests for the LLM-as-judge evaluator redesign.
 
-All tests mock litellm.completion — no actual LLM calls.
+All tests mock any_llm.completion — no actual LLM calls.
 """
 
 import json
@@ -27,9 +27,9 @@ from pydantic import ValidationError
 from unittest.mock import patch, MagicMock
 from typing import Optional
 
-# Create a mock litellm module so we can patch it
-_mock_litellm = MagicMock()
-sys.modules.setdefault("litellm", _mock_litellm)
+# Create a mock LLM client module so we can patch it
+_mock_any_llm = MagicMock()
+sys.modules.setdefault("any_llm", _mock_any_llm)
 
 from amp_evaluation.evaluators.base import (  # noqa: E402
     LLMAsJudgeEvaluator,
@@ -60,16 +60,16 @@ def _make_trace(**overrides):
     return Trace(**defaults)
 
 
-def _mock_litellm_response(score: float, explanation: str = "Good"):
-    """Create a mock litellm completion response."""
+def _mock_response(score: float, explanation: str = "Good"):
+    """Create a mock completion response."""
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = json.dumps({"score": score, "explanation": explanation})
     return mock_response
 
 
-def _mock_litellm_raw_response(content: str):
-    """Create a mock litellm response with raw content string."""
+def _mock_raw_response(content: str):
+    """Create a mock response with raw content string."""
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = content
@@ -255,16 +255,16 @@ class TestPydanticOutputValidation:
 
 
 # =============================================================================
-# End-to-end pipeline (mocked LiteLLM)
+# End-to-end pipeline (mocked LLM client)
 # =============================================================================
 
 
 class TestEndToEnd:
-    """Test full LLM-as-judge pipeline with mocked LiteLLM."""
+    """Test full LLM-as-judge pipeline with mocked LLM client."""
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_full_pipeline(self, mock_completion):
-        mock_completion.return_value = _mock_litellm_response(0.85, "Well done")
+        mock_completion.return_value = _mock_response(0.85, "Well done")
 
         evaluator = _SimpleJudge()
         trace = _make_trace()
@@ -276,10 +276,10 @@ class TestEndToEnd:
         assert "model=gpt-4o-mini" in result.explanation
         mock_completion.assert_called_once()
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_output_format_auto_appended(self, mock_completion):
         """Verify prompt sent to LLM contains JSON format instructions."""
-        mock_completion.return_value = _mock_litellm_response(0.9, "Great")
+        mock_completion.return_value = _mock_response(0.9, "Great")
 
         evaluator = _SimpleJudge()
         trace = _make_trace()
@@ -291,7 +291,7 @@ class TestEndToEnd:
         assert '"explanation"' in prompt_sent
         assert "JSON" in prompt_sent
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_build_prompt_receives_correct_types(self, mock_completion):
         """Verify build_prompt receives correct types."""
         received_args = []
@@ -303,7 +303,7 @@ class TestEndToEnd:
                 received_args.append({"trace": trace, "task": task})
                 return "Evaluate this"
 
-        mock_completion.return_value = _mock_litellm_response(0.9, "OK")
+        mock_completion.return_value = _mock_response(0.9, "OK")
 
         evaluator = TraceJudge()
         trace = _make_trace()
@@ -315,13 +315,13 @@ class TestEndToEnd:
         assert isinstance(received_args[0]["trace"], Trace)
         assert isinstance(received_args[0]["task"], Task)
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_retry_on_invalid_output(self, mock_completion):
         """Test retry sends Pydantic error on invalid first response."""
         # First call: invalid, second call: valid
         mock_completion.side_effect = [
-            _mock_litellm_raw_response('{"score": 99}'),  # Invalid
-            _mock_litellm_response(0.8, "Retry worked"),  # Valid
+            _mock_raw_response('{"score": 99}'),  # Invalid
+            _mock_response(0.8, "Retry worked"),  # Valid
         ]
 
         evaluator = _SimpleJudge()
@@ -337,10 +337,10 @@ class TestEndToEnd:
         second_prompt = mock_completion.call_args_list[1][1]["messages"][0]["content"]
         assert "invalid" in second_prompt.lower() or "Previous response" in second_prompt
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_all_retries_exhausted(self, mock_completion):
         """Test skipped result when all retries fail."""
-        mock_completion.return_value = _mock_litellm_raw_response('{"bad": "json"}')
+        mock_completion.return_value = _mock_raw_response('{"bad": "json"}')
 
         evaluator = _SimpleJudge(max_retries=1)
         trace = _make_trace()
@@ -351,10 +351,10 @@ class TestEndToEnd:
         assert "failed after 2 attempts" in result.skip_reason.lower()
         assert mock_completion.call_count == 2  # 1 initial + 1 retry
 
-    @patch("litellm.completion")
-    def test_custom_model_passed_to_litellm(self, mock_completion):
+    @patch("any_llm.completion")
+    def test_custom_model_passed_to_client(self, mock_completion):
         """Test that custom model identifier is passed through."""
-        mock_completion.return_value = _mock_litellm_response(0.7, "OK")
+        mock_completion.return_value = _mock_response(0.7, "OK")
 
         evaluator = _SimpleJudge(model="anthropic/claude-sonnet-4-20250514")
         trace = _make_trace()
@@ -363,10 +363,10 @@ class TestEndToEnd:
         call_args = mock_completion.call_args
         assert call_args[1]["model"] == "anthropic/claude-sonnet-4-20250514"
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_temperature_and_max_tokens_passed(self, mock_completion):
         """Test that temperature and max_tokens are forwarded."""
-        mock_completion.return_value = _mock_litellm_response(0.7, "OK")
+        mock_completion.return_value = _mock_response(0.7, "OK")
 
         evaluator = _SimpleJudge(temperature=0.5, max_tokens=2048)
         trace = _make_trace()
@@ -423,9 +423,9 @@ class TestLLMJudgeDecorator:
 
         assert experiment_judge._supported_eval_modes == [EvalMode.EXPERIMENT]
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_decorator_end_to_end(self, mock_completion):
-        mock_completion.return_value = _mock_litellm_response(0.9, "Excellent")
+        mock_completion.return_value = _mock_response(0.9, "Excellent")
 
         @llm_judge
         def quality_judge(trace: Trace) -> str:
@@ -447,9 +447,9 @@ class TestLLMJudgeDecorator:
 class TestSubclassing:
     """Test subclassing LLMAsJudgeEvaluator."""
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_custom_build_prompt_called(self, mock_completion):
-        mock_completion.return_value = _mock_litellm_response(0.75, "Custom")
+        mock_completion.return_value = _mock_response(0.75, "Custom")
 
         class CustomJudge(LLMAsJudgeEvaluator):
             name = "custom"
@@ -474,7 +474,7 @@ class TestSubclassing:
                 return f"Evaluate: {trace.output}"
 
             def _call_llm_with_retry(self, prompt: str) -> EvalResult:
-                # Custom LLM logic — no litellm needed
+                # Custom LLM logic — no shared LLM client needed
                 return EvalResult(
                     score=0.95,
                     passed=True,
@@ -724,10 +724,10 @@ class TestFunctionLLMJudgeParams:
 
         assert my_judge.description == "Check response quality."
 
-    @patch("litellm.completion")
+    @patch("any_llm.completion")
     def test_end_to_end_with_params(self, mock_completion):
         """Full evaluate() call with Param injection into prompt."""
-        mock_completion.return_value = _mock_litellm_response(0.9, "Great")
+        mock_completion.return_value = _mock_response(0.9, "Great")
 
         @llm_judge
         def my_judge(

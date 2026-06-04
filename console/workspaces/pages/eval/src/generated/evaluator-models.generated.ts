@@ -3232,6 +3232,7 @@ export const LLM_JUDGE_BASE_CONFIG_SCHEMA: EvaluatorConfigParam[] = [
 export const SUPPORTED_PACKAGES: string[] = [
   "amp-evaluation",
   "requests",
+  "any-llm-sdk",
   "numpy",
   "pandas",
 ];

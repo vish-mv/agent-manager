@@ -85,6 +85,16 @@ class LLMJudgeConfig(BaseSettings):
         description="Default LLM model for all LLM-as-judge evaluators (overridable per-evaluator)",
     )
 
+    api_base: str = Field(
+        default="",
+        description="Optional gateway base URL all judge completions are routed through (empty = call providers directly)",
+    )
+
+    api_key: str = Field(
+        default="",
+        description="Optional gateway API key, injected as the 'api-key' auth header when api_base is set",
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="AMP_LLM_JUDGE_",
         env_file=".env",

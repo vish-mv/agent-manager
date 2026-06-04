@@ -1,4 +1,4 @@
 requests>=2.31.0
-litellm==1.81.14
+any-llm-sdk[openai,anthropic,gemini,groq,mistral,bedrock,azureopenai,azure]==1.16.0
 numpy>=2.2.0
 pandas>=2.2.0

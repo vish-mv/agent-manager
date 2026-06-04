@@ -16,9 +16,10 @@
 
 package catalog
 
-// liteLLMProviderPrefixes maps gateway LLM provider template handles to the
-// model prefix expected by LiteLLM (e.g. "bedrock", "azure", "openai").
-var liteLLMProviderPrefixes = map[string]string{
+// providerModelPrefixes maps gateway LLM provider template handles to the
+// provider segment of the "provider/model" identifier the evaluation job's
+// LLM client expects (e.g. "bedrock", "openai", "anthropic").
+var providerModelPrefixes = map[string]string{
 	"openai":          "openai",
 	"anthropic":       "anthropic",
 	"gemini":          "gemini",
@@ -26,14 +27,15 @@ var liteLLMProviderPrefixes = map[string]string{
 	"mistral":         "mistral",
 	"mistralai":       "mistral",
 	"awsbedrock":      "bedrock",
-	"azure-openai":    "azure",
-	"azureai-foundry": "azure_ai",
+	"azure-openai":    "azureopenai",
+	"azureai-foundry": "azure",
 }
 
-// GetLiteLLMPrefix resolves a gateway provider TemplateHandle to the LiteLLM
-// model prefix string. Returns ("", false) for unknown handles — the caller
-// should store the bare model name and let the evaluation job apply its default.
-func GetLiteLLMPrefix(templateHandle string) (string, bool) {
-	prefix, ok := liteLLMProviderPrefixes[templateHandle]
+// GetProviderPrefix resolves a gateway provider TemplateHandle to the
+// "provider/model" prefix string. Returns ("", false) for unknown handles — the
+// caller should store the bare model name and let the evaluation job apply its
+// default.
+func GetProviderPrefix(templateHandle string) (string, bool) {
+	prefix, ok := providerModelPrefixes[templateHandle]
 	return prefix, ok
 }

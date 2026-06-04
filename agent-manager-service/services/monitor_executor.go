@@ -199,7 +199,7 @@ func (e *monitorExecutor) UpdateNextRunTime(ctx context.Context, monitorID uuid.
 	return nil
 }
 
-// resolveLLMProxyConfig returns the secret KV path, gateway proxy URL, and LiteLLM
+// resolveLLMProxyConfig returns the secret KV path, gateway proxy URL, and
 // provider template handle for the monitor's LLM proxy mapping.
 // Returns empty strings if no proxy mapping exists.
 // The KV path and secret key are read from the persisted mapping (set during provisioning
@@ -374,7 +374,7 @@ type evalJobEvaluator struct {
 
 // serializeEvaluators converts evaluators to a JSON string for the evaluation job workflow parameter.
 // For custom evaluators, it resolves their full definitions from the DB.
-// templateHandle is used to prepend the LiteLLM provider prefix to the "model" config field
+// templateHandle is used to prepend the provider prefix to the "model" config field
 // just before serialization — the stored evaluator config is not modified.
 // Returns the JSON string, whether any evaluator is type "llm_judge", and any error.
 func (e *monitorExecutor) serializeEvaluators(orgName string, evaluators []models.MonitorEvaluator, templateHandle string) (string, bool, error) {
@@ -398,7 +398,7 @@ func (e *monitorExecutor) serializeEvaluators(orgName string, evaluators []model
 		}
 	}
 
-	liteLLMPrefix, hasPrefix := catalog.GetLiteLLMPrefix(templateHandle)
+	providerPrefix, hasPrefix := catalog.GetProviderPrefix(templateHandle)
 
 	var hasLLMJudge bool
 	jobEvaluators := make([]evalJobEvaluator, len(evaluators))
@@ -409,14 +409,14 @@ func (e *monitorExecutor) serializeEvaluators(orgName string, evaluators []model
 			jobConfig[k] = v
 		}
 		// When a proxy is in use, always normalise the model to a bare name first,
-		// then optionally prepend the LiteLLM provider prefix. This prevents a stale
+		// then optionally prepend the provider prefix. This prevents a stale
 		// "oldprovider/model" value from leaking through when the provider changes.
 		if model, ok := jobConfig["model"].(string); ok && model != "" && templateHandle != "" {
 			if idx := strings.Index(model, "/"); idx != -1 {
 				model = model[idx+1:]
 			}
 			if hasPrefix {
-				jobConfig["model"] = liteLLMPrefix + "/" + model
+				jobConfig["model"] = providerPrefix + "/" + model
 			} else {
 				jobConfig["model"] = model
 			}

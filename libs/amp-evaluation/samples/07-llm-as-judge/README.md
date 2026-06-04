@@ -16,7 +16,7 @@ Shows how to use LLMs to evaluate agent outputs. Covers both class-based (`LLMAs
 
 1. You write `build_prompt()` -- return the evaluation prompt as a string
 2. The framework appends output format instructions automatically (JSON with `score` and `explanation`)
-3. The LLM is called via LiteLLM with JSON mode enabled
+3. The LLM is called via the configured LLM client with JSON mode enabled
 4. The response is validated with a Pydantic `JudgeOutput` model (`score: float`, `explanation: str`)
 5. On invalid output, the framework retries with the Pydantic error as context (like Instructor)
 6. The validated output becomes an `EvalResult`
@@ -24,11 +24,11 @@ Shows how to use LLMs to evaluate agent outputs. Covers both class-based (`LLMAs
 ## Prerequisites
 
 ```bash
-pip install amp-evaluation litellm
+pip install amp-evaluation 'any-llm-sdk[openai]'
 export OPENAI_API_KEY=sk-...  # or another LLM provider key
 ```
 
-LiteLLM supports many providers (OpenAI, Anthropic, Azure, etc.). Set the model identifier accordingly:
+The LLM client supports many providers (OpenAI, Anthropic, Azure, etc.). Install the matching extra (e.g. `any-llm-sdk[anthropic]`) and set the model identifier accordingly:
 - `gpt-4o`, `gpt-4o-mini` (OpenAI)
 - `anthropic/claude-sonnet-4-20250514` (Anthropic)
 - `azure/gpt-4o` (Azure OpenAI)
@@ -79,7 +79,7 @@ class MyJudge(LLMAsJudgeEvaluator):
 ## How to run
 
 ```bash
-pip install amp-evaluation litellm
+pip install amp-evaluation 'any-llm-sdk[openai]'
 export OPENAI_API_KEY=sk-...
 python run.py
 ```
@@ -106,6 +106,6 @@ Scores:
       [PASS] trace=... score=0.85
               Good accuracy
       [ SKIP] trace=...
-              litellm.AuthenticationError: ...
+              AuthenticationError: ...
   ...
 ```

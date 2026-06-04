@@ -6,7 +6,7 @@ target-version = "py311"
 python_version = "3.11"
 
 [[tool.mypy.overrides]]
-module = ["litellm.*"]
+module = ["any_llm.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

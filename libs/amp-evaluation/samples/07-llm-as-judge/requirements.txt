@@ -1,2 +1,2 @@
 amp-evaluation
-litellm
+any-llm-sdk[openai]

@@ -28,9 +28,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Ensure litellm is mocked before imports
-_mock_litellm = MagicMock()
-sys.modules.setdefault("litellm", _mock_litellm)
+# Ensure the LLM client is mocked before imports
+_mock_any_llm = MagicMock()
+sys.modules.setdefault("any_llm", _mock_any_llm)
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -1173,7 +1173,7 @@ class TestScoreRangeAndPolarity:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps({"score": 0.8, "explanation": "ok"})
 
-        with patch("litellm.completion", return_value=mock_response) as mock_completion:
+        with patch("any_llm.completion", return_value=mock_response) as mock_completion:
             ev = HelpfulnessEvaluator()
             ev.evaluate(_make_trace())
 

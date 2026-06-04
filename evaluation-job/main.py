@@ -134,14 +134,6 @@ def configure_logging() -> None:
     handler.setFormatter(JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
     logging.basicConfig(level=logging.INFO, handlers=[handler])
     logging.getLogger(__name__).setLevel(level)
-    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-
-    try:
-        import litellm
-
-        litellm.suppress_debug_info = True
-    except ImportError:
-        pass
 
 
 def parse_args() -> argparse.Namespace:
@@ -514,32 +506,25 @@ def main() -> None:
     llm_api_key = os.environ.get("LLM_API_KEY")
     llm_api_base = os.environ.get("LLM_API_BASE")
 
+    # The two are injected together (URL as a workflow parameter, key from the
+    # Secret); exactly one being set means a broken deployment, so fail fast
+    # rather than silently running judges with no gateway and no provider key.
+    if bool(llm_api_key) != bool(llm_api_base):
+        logger.error("LLM_API_BASE and LLM_API_KEY must be set together for gateway routing")
+        sys.exit(1)
+
     gateway_enabled = bool(llm_api_key and llm_api_base)
     if gateway_enabled:
-        import warnings
+        assert llm_api_base and llm_api_key
 
-        import litellm as _litellm
+        # Route every judge completion through the WSO2 gateway: the SDK sends
+        # each request to this base URL and the gateway api-key is injected as a
+        # request header on the underlying provider client by the evaluation lib.
+        from amp_evaluation.config import get_config
 
-        _litellm.api_key = "dummy-key"  # suppress Authorization: Bearer header
-        _litellm.api_base = llm_api_base
-        _litellm.headers = {"api-key": llm_api_key}  # type: ignore[assignment]  # WSO2 gateway auth header
-
-        # LiteLLM's Anthropic provider does not pick up litellm.headers (unlike every other
-        # provider which has `headers = headers or litellm.headers`). Wrap completion() so
-        # the gateway api-key is injected via extra_headers, which all providers honour.
-        _orig_completion = _litellm.completion
-        _gateway_extra_headers = {"api-key": llm_api_key}
-
-        def _completion_with_gateway_headers(*args, **kwargs):  # type: ignore[no-untyped-def]
-            eh = kwargs.get("extra_headers") or {}
-            kwargs["extra_headers"] = {**_gateway_extra_headers, **eh}
-            return _orig_completion(*args, **kwargs)
-
-        _litellm.completion = _completion_with_gateway_headers  # type: ignore[assignment]
-
-        # LiteLLM passes non-conforming objects to pydantic (wrong Choices subtype, 6-field
-        # Message vs the expected 10-field schema). Response content is unaffected.
-        warnings.filterwarnings("ignore", module="pydantic")
+        judge_cfg = get_config().llm_judge
+        judge_cfg.api_base = llm_api_base
+        judge_cfg.api_key = llm_api_key
 
         logger.info("Configured LLM client to route through OpenAI-compatible gateway at %s", llm_api_base)
 
@@ -619,7 +604,7 @@ def main() -> None:
         eval_type = evaluator.get("type")  # None for built-in, "code" or "llm_judge" for custom
 
         try:
-            # Ensure model has a LiteLLM provider prefix for LLM-judge evaluators.
+            # Ensure model has a provider prefix for LLM-judge evaluators.
             # Known providers have the prefix stored in the DB at creation time.
             # Unknown/legacy providers fall back to openai/ with a warning.
             if eval_type == "llm_judge" and gateway_enabled and "model" in config:

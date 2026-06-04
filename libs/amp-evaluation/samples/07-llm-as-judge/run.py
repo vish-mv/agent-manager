@@ -18,7 +18,7 @@
 LLM-as-judge evaluators: Discover evaluators, run Monitor, handle missing API keys.
 
 This sample requires:
-  pip install litellm
+  pip install 'any-llm-sdk[openai]'
   export OPENAI_API_KEY=...  (or another LLM provider key)
 
 If the LLM API key is not set, the sample will still run but LLM-based
@@ -63,8 +63,8 @@ def main():
             print("Set OPENAI_API_KEY (or another provider key) to run LLM judges.")
     except Exception as e:
         print(f"Error running monitor: {e}")
-        print("\nEnsure litellm is installed and an API key is set:")
-        print("  pip install litellm")
+        print("\nEnsure the LLM client is installed and an API key is set:")
+        print("  pip install 'any-llm-sdk[openai]'")
         print("  export OPENAI_API_KEY=sk-...")
 
 

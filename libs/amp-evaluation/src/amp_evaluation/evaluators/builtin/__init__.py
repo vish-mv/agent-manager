@@ -233,9 +233,9 @@ def builtin_evaluator_catalog(mode: Optional[str] = None) -> List[EvaluatorInfo]
 
 # Supported LLM providers for LLM-as-judge evaluation.
 # Models are curated chat/completion models only — no audio/realtime/vision/embedding/image.
-# Model names use provider/model format (litellm-compatible identifiers).
+# Model names use provider/model format.
 # Ordered powerful → lightweight within each provider.
-# Curated from litellm.model_cost (2026-02). Review periodically when major model releases are announced.
+# Curated from each provider's published model catalog (2026-02). Review periodically when major model releases are announced.
 _SUPPORTED_PROVIDERS: Dict[str, dict] = {
     "openai": {
         "display_name": "OpenAI",
@@ -322,7 +322,7 @@ def get_llm_provider_catalog() -> List[LLMProviderInfo]:
 
     Provider metadata (env vars, models, display names) is defined in _SUPPORTED_PROVIDERS.
     The env_var on each LLMConfigField is the environment variable the platform must set
-    on the evaluation job process — litellm reads these natively.
+    on the evaluation job process — the LLM client reads these natively.
 
     Returns:
         List of LLMProviderInfo, one per supported provider.

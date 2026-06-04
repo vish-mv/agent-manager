@@ -459,8 +459,8 @@ class LLMConfigField:
       "password"  -> secret (mask in UI, do not log, treat as credential)
       "text"      -> plain text (e.g. api_base URL, api_version string)
 
-    Values come from litellm's provider_create_fields.json — no custom
-    secret detection logic needed.
+    Values are curated from each provider's credential requirements — no
+    custom secret detection logic needed.
     """
 
     key: str  # "api_key", "api_base"

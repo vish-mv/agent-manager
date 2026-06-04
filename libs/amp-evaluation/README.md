@@ -14,7 +14,7 @@ pip install amp-evaluation
 
 ```bash
 # For LLM-as-judge evaluators (multi-vendor LLM support)
-pip install litellm
+pip install 'any-llm-sdk[openai]'
 
 # For DeepEval evaluators
 pip install deepeval>=3.8.4
@@ -251,7 +251,7 @@ Use an LLM to evaluate agent outputs for subjective criteria that rule-based che
 2. **Level** auto-detected from first parameter type hint (`Trace`, `AgentTrace`, `LLMSpan`)
 3. **Mode** auto-detected from task parameter (same rules as regular evaluators)
 4. Framework auto-appends output format instructions to your prompt
-5. LLM called via [LiteLLM](https://docs.litellm.ai/) (supports 100+ providers)
+5. LLM called via [any-llm](https://github.com/mozilla-ai/any-llm) (supports many providers)
 6. Response validated with Pydantic (`score: 0.0–1.0`, `explanation: str`)
 7. On invalid output, retries with Pydantic error as context (like [Instructor](https://python.useinstructor.com/))
 
@@ -341,7 +341,7 @@ Response: {llm.output}"""
 
 ### Custom LLM Client
 
-Override `_call_llm_with_retry()` to use any LLM client instead of LiteLLM:
+Override `_call_llm_with_retry()` to use any LLM client instead of the default one:
 
 ```python
 class CustomLLMJudge(LLMAsJudgeEvaluator):
@@ -368,16 +368,16 @@ LLM-as-judge evaluators use `Param` descriptors:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `model` | `gpt-4o-mini` | LiteLLM model identifier |
+| `model` | `gpt-4o-mini` | provider/model identifier |
 | `provider` | `openai` | LLM provider name |
 | `criteria` | `quality, accuracy, and helpfulness` | Evaluation criteria |
 | `temperature` | `0.0` | LLM temperature |
 | `max_tokens` | `1024` | Max tokens for response |
 | `max_retries` | `2` | Retries on invalid output |
 
-### LiteLLM Model Identifiers
+### Model Identifiers
 
-LiteLLM uses a `provider/model` format:
+Models use a `provider/model` format:
 
 | Provider | Example |
 |----------|---------|
@@ -552,7 +552,7 @@ Deterministic, fast, and free. No LLM calls required.
 
 #### LLM-as-Judge Evaluators
 
-Use an LLM to assess subjective quality. Require a configured LLM provider (see [LiteLLM Model Identifiers](#litellm-model-identifiers)). All accept a `threshold` param (default 0.5).
+Use an LLM to assess subjective quality. Require a configured LLM provider (see [Model Identifiers](#model-identifiers)). All accept a `threshold` param (default 0.5).
 
 **Quality** — Response clarity, structure, and communication effectiveness:
 

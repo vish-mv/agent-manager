@@ -27,7 +27,7 @@ Demonstrates five patterns:
 LLM-as-judge evaluators write a build_prompt() method (or a prompt-building
 function for the decorator). The framework handles:
 - Appending output format instructions
-- Calling the LLM via LiteLLM
+- Calling the LLM via the configured LLM client
 - Validating the response with Pydantic (JudgeOutput model)
 - Retrying on invalid output with error context
 """
@@ -48,7 +48,7 @@ class ResponseQualityJudge(LLMAsJudgeEvaluator):
     """Uses an LLM to judge response quality."""
 
     name = "response-quality-judge"
-    model = "gpt-4o-mini"  # LiteLLM model identifier
+    model = "gpt-4o-mini"  # provider/model identifier
     criteria = "helpfulness, accuracy, and completeness"
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
@@ -128,7 +128,7 @@ class CustomClientJudge(LLMAsJudgeEvaluator):
         return f"Evaluate: {trace.input} -> {trace.output}"
 
     def _call_llm_with_retry(self, prompt: str) -> EvalResult:
-        """Override to use your own LLM client instead of LiteLLM.
+        """Override to use your own LLM client instead of the default one.
 
         Example with OpenAI client:
             import openai

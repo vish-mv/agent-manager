@@ -498,7 +498,7 @@ class LLMAsJudgeEvaluator(BaseEvaluator):
     2. Level auto-detected from build_prompt() first param type hint
     3. Mode auto-detected from build_prompt() task param
     4. Framework appends output format instructions automatically
-    5. LLM called via LiteLLM, response validated with Pydantic JudgeOutput
+    5. LLM called via the configured LLM client, response validated with Pydantic JudgeOutput
     6. Retries on invalid output with Pydantic error as context (like Instructor)
 
     Example:
@@ -613,12 +613,48 @@ The "explanation" field MUST be formatted as valid Markdown. Use headings, bulle
             raise TypeError(f"build_prompt() must return a str, got {type(prompt).__name__}")
         return prompt
 
-    def _call_llm_with_retry(self, prompt: str) -> EvalResult:
-        """Call LLM via LiteLLM, validate with Pydantic, retry on failure."""
+    @staticmethod
+    def _gateway_kwargs() -> dict:
+        """Build per-call routing kwargs when a gateway is configured.
+
+        When ``llm_judge.api_base`` is set, every completion is routed through
+        that gateway and the configured key is injected as the ``api-key``
+        header on the underlying provider client. With no gateway configured
+        the providers are called directly (auth via their own env vars).
+        """
         try:
-            from litellm import completion
+            from ..config import get_config
+
+            cfg = get_config().llm_judge
+        except Exception:
+            return {}
+
+        if not cfg.api_base:
+            return {}
+
+        kwargs: dict = {"api_base": cfg.api_base}
+        if cfg.api_key:
+            # The gateway authenticates via the api-key header, but the provider
+            # SDK still requires a non-empty api_key to construct its client. Pass
+            # a placeholder bearer token (the gateway ignores it) and send the real
+            # key only in the api-key header.
+            kwargs["api_key"] = "gateway"
+            kwargs["client_args"] = {"default_headers": {"api-key": cfg.api_key}}
+        # When api_base is set without a gateway key, auth is intentionally left
+        # to the provider's own env vars — no placeholder is forced, so an
+        # env-based provider key is not overridden.
+        return kwargs
+
+    def _call_llm_with_retry(self, prompt: str) -> EvalResult:
+        """Call the LLM client, validate with Pydantic, retry on failure."""
+        try:
+            from any_llm import completion
         except ImportError:
-            raise ImportError("LiteLLM is required for LLM-as-judge evaluators. Install with: pip install litellm")
+            raise ImportError(
+                "The any-llm SDK is required for LLM-as-judge evaluators. Install with: pip install 'any-llm-sdk'"
+            )
+
+        gateway_kwargs = self._gateway_kwargs()
 
         last_error = None
         for attempt in range(self.max_retries + 1):
@@ -637,8 +673,8 @@ The "explanation" field MUST be formatted as valid Markdown. Use headings, bulle
                     messages=[{"role": "user", "content": prompt + retry_ctx}],
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
-                    response_format={"type": "json_object"},
-                    drop_params=True,
+                    response_format=JudgeOutput,
+                    **gateway_kwargs,
                 )
             except Exception as e:
                 last_error = str(e)

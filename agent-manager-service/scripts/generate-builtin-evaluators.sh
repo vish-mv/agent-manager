@@ -96,7 +96,7 @@ if [[ "${DEV_MODE}" == "true" ]]; then
 
     if [[ -d "${LOCAL_AMP_EVAL}" ]]; then
         log_info "Installing amp-evaluation from local source (dev mode)..."
-        pip install --quiet -e "${LOCAL_AMP_EVAL}[litellm]"
+        pip install --quiet -e "${LOCAL_AMP_EVAL}[any-llm]"
     else
         log_error "Local amp-evaluation not found at ${LOCAL_AMP_EVAL}"
         log_error "Run from repository root or use --amp-eval-version for production"
@@ -104,10 +104,10 @@ if [[ "${DEV_MODE}" == "true" ]]; then
     fi
 elif [[ -n "${AMP_EVAL_VERSION}" ]]; then
     log_info "Installing amp-evaluation==${AMP_EVAL_VERSION} from PyPI..."
-    pip install --quiet "amp-evaluation[litellm]==${AMP_EVAL_VERSION}"
+    pip install --quiet "amp-evaluation[any-llm]==${AMP_EVAL_VERSION}"
 else
     log_info "Installing latest amp-evaluation from PyPI..."
-    pip install --quiet "amp-evaluation[litellm]"
+    pip install --quiet "amp-evaluation[any-llm]"
 fi
 
 # Generate the Go source file
