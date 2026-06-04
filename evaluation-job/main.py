@@ -506,6 +506,13 @@ def main() -> None:
     llm_api_key = os.environ.get("LLM_API_KEY")
     llm_api_base = os.environ.get("LLM_API_BASE")
 
+    # The two are injected together (URL as a workflow parameter, key from the
+    # Secret); exactly one being set means a broken deployment, so fail fast
+    # rather than silently running judges with no gateway and no provider key.
+    if bool(llm_api_key) != bool(llm_api_base):
+        logger.error("LLM_API_BASE and LLM_API_KEY must be set together for gateway routing")
+        sys.exit(1)
+
     gateway_enabled = bool(llm_api_key and llm_api_base)
     if gateway_enabled:
         assert llm_api_base and llm_api_key

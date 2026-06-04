@@ -640,6 +640,9 @@ The "explanation" field MUST be formatted as valid Markdown. Use headings, bulle
             # key only in the api-key header.
             kwargs["api_key"] = "gateway"
             kwargs["client_args"] = {"default_headers": {"api-key": cfg.api_key}}
+        # When api_base is set without a gateway key, auth is intentionally left
+        # to the provider's own env vars — no placeholder is forced, so an
+        # env-based provider key is not overridden.
         return kwargs
 
     def _call_llm_with_retry(self, prompt: str) -> EvalResult:
