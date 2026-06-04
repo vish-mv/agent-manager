@@ -1339,6 +1339,7 @@ data:
     R_PROXY_KEY=$(create_or_get_resource  "$RS_ID" "LLM Proxy API Key"        "api-key"   "LLM proxy API key management"       "$R_PROXY")
     R_AGENT_DEPLOY=$(create_or_get_resource "$RS_ID" "Agent Deployment"       "deploy"    "Agent deployment operations"        "$R_AGENT")
     R_AGENT_TOKEN=$(create_or_get_resource  "$RS_ID" "Agent Token"            "token"     "Agent token management"             "$R_AGENT")
+    R_AGENT_KEY=$(create_or_get_resource    "$RS_ID" "Agent API Key"          "api-key"   "Agent API key management"           "$R_AGENT")
     R_MON_SCORE=$(create_or_get_resource  "$RS_ID" "Monitor Score"            "score"     "Monitor score management"           "$R_MON")
 
     log_info "Level-2 sub-resources created."
@@ -1442,6 +1443,8 @@ data:
     create_action "$RS_ID" "$R_AGENT_DEPLOY" "Production"             "production"             "Deploy an agent to a production environment"
     # agent/token actions  → amp:agent:token:<action>
     create_action "$RS_ID" "$R_AGENT_TOKEN"  "Manage"                 "manage"                 "Generate agent tokens"
+    # agent/api-key actions  → amp:agent:api-key:<action>
+    create_action "$RS_ID" "$R_AGENT_KEY"    "Manage"                 "manage"                 "Create, update, and delete agent API keys"
 
     # agent-kind actions  → amp:agent-kind:<action>
     create_action "$RS_ID" "$R_AGENT_KIND"   "Create"                 "create"                 "Create an agent kind"
@@ -1483,7 +1486,7 @@ data:
     # repository actions  → amp:repository:<action>
     create_action "$RS_ID" "$R_REPO"         "Read"                   "read"                   "Browse repository branches and commits"
 
-    log_info "Agent Manager resource server registration complete (89 permissions registered)."
+    log_info "Agent Manager resource server registration complete (90 permissions registered)."
 
   61-amp-default-roles.sh: |
     #!/bin/bash

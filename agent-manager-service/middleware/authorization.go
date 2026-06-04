@@ -48,10 +48,8 @@ func NewResolverForbiddenError(msg string) *ResolverError {
 }
 
 // RequireOrgMatch returns a middleware that:
-//  1. Verifies the token's ouHandle matches {orgName} in the path (fails closed —
-//     tokens without ouHandle are denied).
-//  2. Resolves orgName → Thunder OU ID via resolver.
-//  3. Injects ResolvedOrg{Name, OUID} into the request context for handlers to use.
+//  1. Validates token carries ouId (required for both cloud and on-prem).
+//  2. Injects ResolvedOrg into the request context for handlers to use.
 func RequireOrgMatch(resolver OrgResolver) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -60,28 +58,15 @@ func RequireOrgMatch(resolver OrgResolver) func(http.HandlerFunc) http.HandlerFu
 				utils.WriteErrorResponse(w, http.StatusForbidden, "missing token claims")
 				return
 			}
-			orgName := r.PathValue(utils.PathParamOrgName)
-			// OuHandle may be absent in on-prem tokens; only enforce when present.
-			if claims.OuHandle != "" && claims.OuHandle != orgName {
-				utils.WriteErrorResponse(w, http.StatusForbidden, "org identity mismatch")
+			if claims.OuId == "" {
+				utils.WriteErrorResponse(w, http.StatusForbidden, "missing ou identity in token")
 				return
 			}
-			ouID := claims.OuId
-			if ouID == "" {
-				if !config.GetConfig().IsOnPremDeployment {
-					// Cloud: every token must carry ouId — no path-based fallback.
-					utils.WriteErrorResponse(w, http.StatusForbidden, "missing ou identity in token")
-					return
-				}
-				// On-prem: single-tenant, safe to resolve via Thunder.
-				var err error
-				ouID, err = resolver.ResolveOUID(r.Context(), orgName)
-				if err != nil {
-					utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to resolve organization")
-					return
-				}
-			}
-			ctx := WithResolvedOrg(r.Context(), ResolvedOrg{Name: orgName, OUID: ouID})
+
+			ctx := WithResolvedOrg(r.Context(), ResolvedOrg{
+				OuHandle: claims.OuHandle,
+				OUID:     claims.OuId,
+			})
 			next(w, r.WithContext(ctx))
 		}
 	}

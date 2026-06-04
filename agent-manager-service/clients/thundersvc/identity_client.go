@@ -238,6 +238,9 @@ func (c *thunderClient) ListGroups(ctx context.Context, ouID string, offset, lim
 		}
 	}
 	total := len(all)
+	if offset < 0 {
+		offset = 0
+	}
 	if offset >= total {
 		return []ThunderGroup{}, total, nil
 	}
@@ -524,6 +527,9 @@ func (c *thunderClient) ListRoles(ctx context.Context, ouID string, offset, limi
 		}
 	}
 	total := len(all)
+	if offset < 0 {
+		offset = 0
+	}
 	if offset >= total {
 		return []ThunderRole{}, total, nil
 	}

@@ -23,11 +23,11 @@ import (
 	"github.com/wso2/agent-manager/agent-manager-service/clients/thundersvc"
 )
 
-// ResolvedOrg holds the org name and its Thunder OU ID, injected into the
-// request context by RequireOrgMatch after successful validation.
+// ResolvedOrg holds the org identity injected into the request context by
+// RequireOrgMatch after successful token validation.
 type ResolvedOrg struct {
-	Name string
-	OUID string
+	OuHandle string // Thunder OU handle from token
+	OUID     string // Thunder OU ID from token
 }
 
 type resolvedOrgKey struct{}

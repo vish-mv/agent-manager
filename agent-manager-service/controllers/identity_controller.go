@@ -25,7 +25,7 @@ import (
 
 	"github.com/wso2/agent-manager/agent-manager-service/clients/thundersvc"
 	"github.com/wso2/agent-manager/agent-manager-service/config"
-	"github.com/wso2/agent-manager/agent-manager-service/middleware/jwtassertion"
+	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware/logger"
 	"github.com/wso2/agent-manager/agent-manager-service/utils"
 )
@@ -84,9 +84,9 @@ func (c *identityController) ListUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -99,9 +99,9 @@ func (c *identityController) ListUsers(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	users, total, err := c.client.ListUsersByOUId(ctx, claims.OuId, offset, limit)
+	users, total, err := c.client.ListUsersByOUId(ctx, resolvedOrg.OUID, offset, limit)
 	if err != nil {
-		log.Error("ListUsers failed", "ouID", claims.OuId, "error", err)
+		log.Error("ListUsers failed", "ouID", resolvedOrg.OUID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to list users")
 		return
 	}
@@ -122,9 +122,9 @@ func (c *identityController) GetUser(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -139,7 +139,7 @@ func (c *identityController) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validateUserOwnership(w, ctx, user, claims.OuId) {
+	if !validateUserOwnership(w, ctx, user, resolvedOrg.OUID) {
 		return
 	}
 	utils.WriteSuccessResponse(w, http.StatusOK, user)
@@ -149,9 +149,9 @@ func (c *identityController) CreateUser(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -174,7 +174,7 @@ func (c *identityController) CreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ouID := claims.OuId
+	ouID := resolvedOrg.OUID
 
 	attrs := map[string]string{"username": body.Username}
 	for _, claim := range body.Claims {
@@ -209,9 +209,9 @@ func (c *identityController) UpdateUser(w http.ResponseWriter, r *http.Request) 
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -226,7 +226,7 @@ func (c *identityController) UpdateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !validateUserOwnership(w, ctx, user, claims.OuId) {
+	if !validateUserOwnership(w, ctx, user, resolvedOrg.OUID) {
 		return
 	}
 
@@ -254,9 +254,9 @@ func (c *identityController) DeleteUser(w http.ResponseWriter, r *http.Request) 
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -271,7 +271,7 @@ func (c *identityController) DeleteUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !validateUserOwnership(w, ctx, user, claims.OuId) {
+	if !validateUserOwnership(w, ctx, user, resolvedOrg.OUID) {
 		return
 	}
 
@@ -292,9 +292,9 @@ func (c *identityController) GetUserGroups(w http.ResponseWriter, r *http.Reques
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -309,7 +309,7 @@ func (c *identityController) GetUserGroups(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if !validateUserOwnership(w, ctx, user, claims.OuId) {
+	if !validateUserOwnership(w, ctx, user, resolvedOrg.OUID) {
 		return
 	}
 
@@ -327,9 +327,9 @@ func (c *identityController) GetUserRoles(w http.ResponseWriter, r *http.Request
 	log := logger.GetLogger(ctx)
 	userID := r.PathValue(utils.PathParamUserID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -344,7 +344,7 @@ func (c *identityController) GetUserRoles(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if !validateUserOwnership(w, ctx, user, claims.OuId) {
+	if !validateUserOwnership(w, ctx, user, resolvedOrg.OUID) {
 		return
 	}
 
@@ -361,9 +361,9 @@ func (c *identityController) InviteUser(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -383,11 +383,11 @@ func (c *identityController) InviteUser(w http.ResponseWriter, r *http.Request) 
 	// Cloud: pass the child OU ID so Thunder scopes the invite correctly.
 	ouIDForInvite := ""
 	if !config.GetConfig().IsOnPremDeployment {
-		ouIDForInvite = claims.OuId
+		ouIDForInvite = resolvedOrg.OUID
 	}
 	inviteLink, err := c.client.InviteUser(ctx, body.Email, ouIDForInvite)
 	if err != nil {
-		log.Error("InviteUser failed", "ouID", claims.OuId, "error", err)
+		log.Error("InviteUser failed", "ouID", resolvedOrg.OUID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to invite user")
 		return
 	}
@@ -400,9 +400,9 @@ func (c *identityController) ListGroups(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -415,9 +415,9 @@ func (c *identityController) ListGroups(w http.ResponseWriter, r *http.Request) 
 		offset = 0
 	}
 
-	groups, total, err := c.client.ListGroupsByOUId(ctx, claims.OuId, offset, limit)
+	groups, total, err := c.client.ListGroupsByOUId(ctx, resolvedOrg.OUID, offset, limit)
 	if err != nil {
-		log.Error("ListGroups failed", "ouID", claims.OuId, "error", err)
+		log.Error("ListGroups failed", "ouID", resolvedOrg.OUID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to list groups")
 		return
 	}
@@ -425,7 +425,7 @@ func (c *identityController) ListGroups(w http.ResponseWriter, r *http.Request) 
 	// Populate OuID for groups from OU-scoped endpoint (they don't return it)
 	for i := range groups {
 		if groups[i].OuID == "" {
-			groups[i].OuID = claims.OuId
+			groups[i].OuID = resolvedOrg.OUID
 		}
 	}
 
@@ -437,9 +437,9 @@ func (c *identityController) GetGroup(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -454,7 +454,7 @@ func (c *identityController) GetGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -465,9 +465,9 @@ func (c *identityController) CreateGroup(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -480,7 +480,7 @@ func (c *identityController) CreateGroup(w http.ResponseWriter, r *http.Request)
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	req.OuID = claims.OuId
+	req.OuID = resolvedOrg.OUID
 
 	group, err := c.client.CreateGroup(ctx, req)
 	if err != nil {
@@ -496,9 +496,9 @@ func (c *identityController) UpdateGroup(w http.ResponseWriter, r *http.Request)
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -513,7 +513,7 @@ func (c *identityController) UpdateGroup(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -541,9 +541,9 @@ func (c *identityController) DeleteGroup(w http.ResponseWriter, r *http.Request)
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -558,7 +558,7 @@ func (c *identityController) DeleteGroup(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -579,9 +579,9 @@ func (c *identityController) AddGroupMembers(w http.ResponseWriter, r *http.Requ
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -596,7 +596,7 @@ func (c *identityController) AddGroupMembers(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -625,9 +625,9 @@ func (c *identityController) RemoveGroupMembers(w http.ResponseWriter, r *http.R
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -642,7 +642,7 @@ func (c *identityController) RemoveGroupMembers(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -671,9 +671,9 @@ func (c *identityController) GetGroupMembers(w http.ResponseWriter, r *http.Requ
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -688,7 +688,7 @@ func (c *identityController) GetGroupMembers(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -712,9 +712,9 @@ func (c *identityController) GetGroupRoles(w http.ResponseWriter, r *http.Reques
 	log := logger.GetLogger(ctx)
 	groupID := r.PathValue(utils.PathParamGroupID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -729,7 +729,7 @@ func (c *identityController) GetGroupRoles(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if !validateGroupOwnership(w, ctx, group, claims.OuId) {
+	if !validateGroupOwnership(w, ctx, group, resolvedOrg.OUID) {
 		return
 	}
 
@@ -748,9 +748,9 @@ func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -760,9 +760,9 @@ func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
 		limit = 20
 	}
 
-	roles, _, err := c.client.ListRoles(ctx, claims.OuId, offset, limit)
+	roles, _, err := c.client.ListRoles(ctx, resolvedOrg.OUID, offset, limit)
 	if err != nil {
-		log.Error("ListRoles failed", "ouID", claims.OuId, "error", err)
+		log.Error("ListRoles failed", "ouID", resolvedOrg.OUID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to list roles")
 		return
 	}
@@ -771,7 +771,7 @@ func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
 	// Thunder's ListRoles endpoint returns all roles, not OU-scoped
 	filteredRoles := make([]thundersvc.ThunderRole, 0, len(roles))
 	for _, role := range roles {
-		if role.OuID == claims.OuId {
+		if role.OuID == resolvedOrg.OUID {
 			filteredRoles = append(filteredRoles, role)
 		}
 	}
@@ -784,9 +784,9 @@ func (c *identityController) GetRole(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -801,7 +801,7 @@ func (c *identityController) GetRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -812,9 +812,9 @@ func (c *identityController) CreateRole(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	log := logger.GetLogger(ctx)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -827,7 +827,7 @@ func (c *identityController) CreateRole(w http.ResponseWriter, r *http.Request) 
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	req.OuID = claims.OuId
+	req.OuID = resolvedOrg.OUID
 
 	role, err := c.client.CreateRole(ctx, req)
 	if err != nil {
@@ -843,9 +843,9 @@ func (c *identityController) UpdateRole(w http.ResponseWriter, r *http.Request) 
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -860,7 +860,7 @@ func (c *identityController) UpdateRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -888,9 +888,9 @@ func (c *identityController) DeleteRole(w http.ResponseWriter, r *http.Request) 
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -905,7 +905,7 @@ func (c *identityController) DeleteRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -926,9 +926,9 @@ func (c *identityController) GetRoleAssignments(w http.ResponseWriter, r *http.R
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -943,7 +943,7 @@ func (c *identityController) GetRoleAssignments(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -961,9 +961,9 @@ func (c *identityController) AddRolePermissions(w http.ResponseWriter, r *http.R
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -978,7 +978,7 @@ func (c *identityController) AddRolePermissions(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -1001,9 +1001,9 @@ func (c *identityController) RemoveRolePermissions(w http.ResponseWriter, r *htt
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -1018,7 +1018,7 @@ func (c *identityController) RemoveRolePermissions(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -1041,9 +1041,9 @@ func (c *identityController) AddRoleAssignees(w http.ResponseWriter, r *http.Req
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -1058,7 +1058,7 @@ func (c *identityController) AddRoleAssignees(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
@@ -1081,9 +1081,9 @@ func (c *identityController) RemoveRoleAssignees(w http.ResponseWriter, r *http.
 	log := logger.GetLogger(ctx)
 	roleID := r.PathValue(utils.PathParamRoleID)
 
-	claims := jwtassertion.GetTokenClaims(ctx)
-	if claims == nil || claims.OuId == "" {
-		utils.WriteErrorResponse(w, http.StatusForbidden, "Missing OU information in token")
+	resolvedOrg, ok := middleware.GetResolvedOrg(ctx)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusForbidden, "missing org context")
 		return
 	}
 
@@ -1098,7 +1098,7 @@ func (c *identityController) RemoveRoleAssignees(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if !validateRoleOwnership(w, ctx, role, claims.OuId) {
+	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
 		return
 	}
 
