@@ -676,20 +676,24 @@ The "explanation" field MUST be formatted as valid Markdown. Use headings, bulle
             return {"api_key": "gateway", "client_args": {"base_url": cfg.api_base, "default_headers": header}}
         elif provider == "bedrock":
             # boto3 has no default_headers hook. Build a client pointed at the
-            # gateway with dummy credentials (the gateway ignores the SigV4
-            # signature and authenticates via the api-key header) and inject that
-            # header through a botocore before-send handler.
+            # gateway and inject the gateway api-key via a botocore before-send
+            # handler. Use UNSIGNED so boto3 sends no SigV4 Authorization — the
+            # gateway authenticates the caller with the api-key header and signs
+            # the upstream AWS call with its own stored credentials. (A dummy
+            # SigV4 signature would be passed through to AWS and rejected with
+            # UnrecognizedClientException.)
             import os
 
             import boto3
+            from botocore import UNSIGNED
+            from botocore.config import Config
 
             key = cfg.api_key
             bedrock_client = boto3.client(
                 "bedrock-runtime",
                 endpoint_url=cfg.api_base,
                 region_name=os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1",
-                aws_access_key_id="gateway",
-                aws_secret_access_key="gateway",
+                config=Config(signature_version=UNSIGNED),
             )
 
             def _inject_gateway_header(request, **_):
