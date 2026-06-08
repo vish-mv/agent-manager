@@ -60,4 +60,3 @@ window.__RUNTIME_CONFIG__ = {
     versionMapping: '/components/amp-instrumentation/#amp-instrumentation-version-mapping',
   },
 };
-
