@@ -82,6 +82,7 @@ data:
             "tokenEndpointAuthMethod": "{{ .Values.thunder.bootstrap.ampApiClient.tokenEndpointAuthMethod }}",
             "pkceRequired": {{ .Values.thunder.bootstrap.ampApiClient.pkceRequired }},
             "publicClient": {{ .Values.thunder.bootstrap.ampApiClient.publicClient }},
+            "scopes": {{ .Values.thunder.bootstrap.ampScopes | toJson }},
             "token": {
               "accessToken": {
                 "validityPeriod": {{ .Values.thunder.bootstrap.ampApiClient.accessTokenValidityPeriod }}
@@ -736,6 +737,7 @@ data:
             "tokenEndpointAuthMethod": "{{ .Values.thunder.bootstrap.ampPublisherClient.tokenEndpointAuthMethod }}",
             "pkceRequired": {{ .Values.thunder.bootstrap.ampPublisherClient.pkceRequired }},
             "publicClient": {{ .Values.thunder.bootstrap.ampPublisherClient.publicClient }},
+            "scopes": {{ .Values.thunder.bootstrap.ampScopes | toJson }},
             "token": {
               "accessToken": {
                 "validityPeriod": {{ .Values.thunder.bootstrap.ampPublisherClient.accessTokenValidityPeriod }}
@@ -842,6 +844,7 @@ data:
             "tokenEndpointAuthMethod": "{{ .Values.thunder.bootstrap.ampSystemClient.tokenEndpointAuthMethod }}",
             "pkceRequired": {{ .Values.thunder.bootstrap.ampSystemClient.pkceRequired }},
             "publicClient": {{ .Values.thunder.bootstrap.ampSystemClient.publicClient }},
+            "scopes": {{ .Values.thunder.bootstrap.ampScopes | toJson }},
             "token": {
               "accessToken": {
                 "validityPeriod": {{ .Values.thunder.bootstrap.ampSystemClient.accessTokenValidityPeriod }}
