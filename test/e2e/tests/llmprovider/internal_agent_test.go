@@ -114,11 +114,7 @@ var _ = Describe("Internal Agent with LLM Provider Config", Label("llm-provider"
 		// Add model config referencing the LLM provider with custom env var names
 		createReq.ModelConfig = []framework.ModelConfigRequest{
 			{
-				EnvMappings: map[string]framework.EnvModelConfigRequest{
-					Cfg.DefaultEnv: {
-						ProviderName: providerID,
-					},
-				},
+				ProviderName: providerID,
 				EnvironmentVariables: []framework.EnvironmentVariableConfig{
 					{Key: "apikey", Name: "LLM_API_KEY"},
 					{Key: "url", Name: "LLM_BASE_URL"},
