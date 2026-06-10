@@ -63,8 +63,8 @@ jobs:
         # (see heavy/driver.py); only the LLM keys are real secrets, and
         # they're forwarded into each deployed agent so it can make calls.
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_ANTHROPIC_API_KEY }}
           # The deployed customer-support-agent's web-search tool needs this.
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           # Build each deployed sample from the ref under test. Nightly runs on
@@ -120,8 +120,8 @@ jobs:
           # Route reports into a side directory so they don't overwrite the
           # main emission run; the noxfile honors REPORTS_DIR.
           REPORTS_DIR: reports/revalidate
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_ANTHROPIC_API_KEY }}
         run: |
           mkdir -p reports/revalidate
           while read cell; do
