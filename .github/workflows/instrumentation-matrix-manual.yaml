@@ -97,8 +97,8 @@ jobs:
         env:
           # `once` records missing interactions; `none` is replay-only.
           VCR_RECORD_MODE: ${{ inputs.include_record_mode && 'once' || 'none' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_ANTHROPIC_API_KEY }}
         run: nox -s emission -- --cell-id=${{ matrix.cell }}
       # Artifact name is keyed by run-id + cell id so multiple manual runs
       # don't collide. The trailing slashes pull cells/ and cassettes/ both.
@@ -181,8 +181,8 @@ jobs:
         # URLs + IDP creds default to the dev bring-up's values; only the LLM
         # keys are secrets, forwarded into each deployed agent.
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.INSTRUMENTATION_TEST_ANTHROPIC_API_KEY }}
           # The deployed customer-support-agent's web-search tool needs this.
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           # Optional single-cell run for cheap iteration; empty = full subset.
