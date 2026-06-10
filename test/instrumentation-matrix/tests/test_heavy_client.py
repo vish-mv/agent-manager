@@ -51,6 +51,22 @@ def test_access_token_fetches_and_caches():
 
 
 @responses.activate
+def test_access_token_requests_rbac_scopes():
+    # Thunder only puts a scope in a client_credentials token when it's requested,
+    # and the service authorizes routes against it under RBAC_ENABLED=true. The
+    # token call must therefore send the provisioning scopes, or every API call 403s.
+    import urllib.parse as _u
+
+    _mock_token()
+    _client().access_token()
+    body = _u.parse_qs([r for r in responses.calls if r.request.url.startswith(TOKEN_URL)][0].request.body)
+    assert body["grant_type"] == ["client_credentials"]
+    requested = body["scope"][0].split()
+    for required in ("project:create", "agent:create", "agent:api-key:manage", "project:delete"):
+        assert required in requested
+
+
+@responses.activate
 def test_access_token_raises_on_failure():
     responses.add(responses.POST, TOKEN_URL, json={"error": "nope"}, status=401)
     with pytest.raises(AmpError, match="token fetch failed"):

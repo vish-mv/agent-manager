@@ -24,11 +24,11 @@ import {
   absoluteRouteMap,
   OrgProjPathParams,
 } from "@agent-management-platform/types";
-import { useCreateAgent } from "@agent-management-platform/api-client";
+import { useCreateAgent, useGetDeploymentPipeline } from "@agent-management-platform/api-client";
 import { createAgentSchema, type CreateAgentFormValues, type LLMProviderFormEntry } from "../form/schema";
 import { InternalAgentForm } from "../forms/InternalAgentForm";
 import { CreateButtons } from "./CreateButtons";
-import { buildAgentCreationPayload } from "../utils/buildAgentPayload";
+import { buildAgentCreationPayload, findLowestEnvironmentName } from "../utils/buildAgentPayload";
 
 export const InternalAgentFlow: React.FC = () => {
   const navigate = useNavigate();
@@ -75,6 +75,12 @@ export const InternalAgentFlow: React.FC = () => {
     }),
     [orgId, projectId]
   );
+  const { data: deploymentPipeline, isLoading: isDeploymentPipelineLoading } =
+    useGetDeploymentPipeline(params);
+  const initialEnvironmentName = useMemo(
+    () => findLowestEnvironmentName(deploymentPipeline?.promotionPaths),
+    [deploymentPipeline?.promotionPaths],
+  );
 
   const handleCancel = useCallback(() => {
     navigate(
@@ -86,7 +92,7 @@ export const InternalAgentFlow: React.FC = () => {
   }, [navigate, orgId, projectId]);
 
   const [lastSubmittedValidationErrors, setLastSubmittedValidationErrors] = useState<
-    typeof errors
+    Record<string, string | undefined>
   >({});
 
   const handleDeploy = useCallback(() => {
@@ -97,7 +103,19 @@ export const InternalAgentFlow: React.FC = () => {
       setLastSubmittedValidationErrors({});
     }
 
-    const payload = buildAgentCreationPayload(formData, params, llmProviders);
+    if (llmProviders.length > 0 && !initialEnvironmentName) {
+      setLastSubmittedValidationErrors({
+        llmProvider: "Unable to resolve the initial deployment environment for LLM provider configuration.",
+      });
+      return;
+    }
+
+    const payload = buildAgentCreationPayload(
+      formData,
+      params,
+      llmProviders,
+      initialEnvironmentName,
+    );
     createAgent(payload, {
       onSuccess: () => {
         navigate(
@@ -116,7 +134,16 @@ export const InternalAgentFlow: React.FC = () => {
         console.error("Failed to create agent:", e);
       },
     });
-  }, [validateForm, formData, createAgent, navigate, params, errors, llmProviders]);
+  }, [
+    validateForm,
+    formData,
+    createAgent,
+    navigate,
+    params,
+    errors,
+    llmProviders,
+    initialEnvironmentName,
+  ]);
 
 
   const backHref = generatePath(
@@ -141,6 +168,8 @@ export const InternalAgentFlow: React.FC = () => {
           validateField={validateField}
           llmProviders={llmProviders}
           setLLMProviders={setLLMProviders}
+          initialEnvironmentName={initialEnvironmentName}
+          isInitialEnvironmentLoading={isDeploymentPipelineLoading}
         />
 
         {!!error && (
@@ -151,7 +180,7 @@ export const InternalAgentFlow: React.FC = () => {
 
         <CreateButtons
           lastSubmittedValidationErrors={lastSubmittedValidationErrors}
-          isPending={isPending}
+          isPending={isPending || (llmProviders.length > 0 && isDeploymentPipelineLoading)}
           onCancel={handleCancel}
           onSubmit={handleDeploy}
           isNameEmpty={!formData.name.trim()}

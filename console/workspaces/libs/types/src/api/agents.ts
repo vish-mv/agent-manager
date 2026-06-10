@@ -20,7 +20,8 @@ import { type AgentPathParams, type Build, type Configurations, type ListQuery, 
 import type { EnvProviderConfiguration, EnvironmentVariableConfig } from './agent-model-configs';
 
 export interface ModelConfigRequest {
-  envMappings: Record<string, { providerName: string; configuration: EnvProviderConfiguration; }>;
+  providerName: string;
+  configuration?: EnvProviderConfiguration;
   environmentVariables?: EnvironmentVariableConfig[];
 }
 

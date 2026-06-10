@@ -135,10 +135,8 @@ func validateInternal(opts *CreateOptions) []string {
 	v = append(v, validateEnvSlice(opts.EnvSecret, "--env-secret", seen)...)
 	v = append(v, validateEnvSlice(opts.EnvFromSecret, "--env-from-secret", seen)...)
 
-	if opts.ModelConfigFile != "" {
-		if _, err := loadModelConfig(opts.ModelConfigFile); err != nil {
-			v = append(v, fmt.Sprintf("--model-config-file: %s", err))
-		}
+	if (opts.LLMURLEnv != "" || opts.LLMAPIKeyEnv != "") && opts.LLMProvider == "" {
+		v = append(v, "--llm-url-env/--llm-api-key-env require --llm-provider")
 	}
 
 	return v
@@ -199,7 +197,9 @@ func validateExternal(opts *CreateOptions) []string {
 	disallow("--env-secret", len(opts.EnvSecret) > 0)
 	disallow("--env-from-secret", len(opts.EnvFromSecret) > 0)
 	disallow("--no-auto-instrumentation", opts.DisableAutoInstrumentation)
-	disallow("--model-config-file", opts.ModelConfigFile != "")
+	disallow("--llm-provider", opts.LLMProvider != "")
+	disallow("--llm-url-env", opts.LLMURLEnv != "")
+	disallow("--llm-api-key-env", opts.LLMAPIKeyEnv != "")
 
 	return v
 }

@@ -19,26 +19,42 @@
 import { getAgentMetrics } from "../apis";
 import { useAuthHooks } from "@agent-management-platform/auth";
 import { useApiQuery } from "./react-query-notifications";
-import type {
-  GetAgentMetricsPathParams,
-  MetricsFilterRequest,
-  MetricsResponse,
+import {
+  getTimeRange,
+  type GetAgentMetricsPathParams,
+  type MetricsFilterRequest,
+  type MetricsResponse,
+  type TraceListTimeRange,
 } from "@agent-management-platform/types";
 import { SLOW_POLL_INTERVAL } from "../utils";
 
 export function useGetAgentMetrics(
   params: GetAgentMetricsPathParams,
   body: MetricsFilterRequest,
-  options?: { enabled?: boolean, enableAutoRefresh?: boolean }
+  options?: { enabled?: boolean; enableAutoRefresh?: boolean; timeRange?: TraceListTimeRange }
 ) {
   const { getToken } = useAuthHooks();
+  const hasPreset = !!options?.timeRange;
   return useApiQuery<MetricsResponse>({
-    queryKey: ["agent-metrics", params, body],
-    queryFn: () => getAgentMetrics(params, body, getToken),
+    queryKey: [
+      "agent-metrics",
+      params,
+      body.environmentName,
+      hasPreset ? options!.timeRange : { startTime: body.startTime, endTime: body.endTime },
+    ],
+    queryFn: () => {
+      const { startTime, endTime } = hasPreset
+        ? getTimeRange(options!.timeRange!)
+        : { startTime: body.startTime, endTime: body.endTime };
+      return getAgentMetrics(
+        params, { environmentName: body.environmentName, startTime, endTime }, getToken,
+      );
+    },
     refetchInterval: options?.enableAutoRefresh ? SLOW_POLL_INTERVAL : undefined,
     enabled:
       (options?.enabled ?? true) &&
       !!params.agentName &&
-      !!body.environmentName
+      !!body.environmentName &&
+      (hasPreset || (!!body.startTime && !!body.endTime)),
   });
 }

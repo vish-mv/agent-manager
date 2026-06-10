@@ -30,7 +30,7 @@ type CreateAgentRequest struct {
 	Build          *Build          `json:"build,omitempty"`
 	Configurations *Configurations `json:"configurations,omitempty"`
 	InputInterface *InputInterface `json:"inputInterface,omitempty"`
-	// Optional LLM configurations to create atomically with the agent. Name and type are auto-generated.
+	// Optional LLM configurations to create atomically with the agent. Applied to the component's initial (lowest) environment. Name and type are auto-generated.
 	ModelConfig []ModelConfigRequest `json:"modelConfig,omitempty"`
 }
 

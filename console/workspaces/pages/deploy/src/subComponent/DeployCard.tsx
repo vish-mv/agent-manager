@@ -68,6 +68,7 @@ import {
   MetricsResponse,
   Environment,
   AgentKindVersionResponse,
+  TraceListTimeRange,
 } from "@agent-management-platform/types";
 import { extractBuildIdFromImageId } from "../utils/extractBuildIdFromImageId";
 import { formatDistanceToNow } from "date-fns";
@@ -290,6 +291,7 @@ export function DeployCard(props: DeployCardProps) {
         !!currentEnvironment.name &&
         isEnvironmentActive,
       enableAutoRefresh: true,
+      timeRange: TraceListTimeRange.TEN_MINUTES,
     },
   );
   const { data: agent } = useGetAgent({

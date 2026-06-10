@@ -21,77 +21,120 @@ import { InternalAgentOverview } from "./InternalAgentOverview";
 import { useParams } from "react-router-dom";
 import { ExternalAgentOverview } from "./ExternalAgentOverview";
 import { useState } from "react";
-import { Box, Chip, Skeleton, IconButton, Tooltip } from "@wso2/oxygen-ui";
-import { Edit } from "@wso2/oxygen-ui-icons-react";
+import { Box, Button, Chip, Skeleton, Stack, Tooltip, Typography } from "@wso2/oxygen-ui";
+import { Clock, Edit } from "@wso2/oxygen-ui-icons-react";
 import { EditAgentDrawer } from "./EditAgentDrawer";
 import {
-  PageLayout,
-  displayProvisionTypes,
+    PageLayout,
+    displayProvisionTypes,
 } from "@agent-management-platform/views";
+import { formatDistanceToNow } from "date-fns";
+import type { AgentResponse } from "@agent-management-platform/types";
 
 function AgentOverviewSkeleton() {
-  return (
-    <Box display="flex" flexDirection="column" gap={4} width="100%">
-      <Skeleton variant="rounded" width="100%" height="40vh" />
-    </Box>
-  );
+    return (
+        <Box display="flex" flexDirection="column" gap={4} width="100%">
+            <Skeleton variant="rounded" width="100%" height="40vh" />
+        </Box>
+    );
 }
 
+interface MetadataItemProps {
+    icon?: React.ReactNode;
+    label: string;
+    value: string;
+}
+
+const MetadataItem: React.FC<MetadataItemProps> = ({ icon, label, value }) => (
+    <Box display="flex" alignItems="center" gap={0.5}>
+        {icon}
+        <Typography variant="caption" color="text.secondary">{label}:</Typography>
+        <Typography variant="caption" fontWeight={500}>{value}</Typography>
+    </Box>
+);
+
+const AgentDescription: React.FC<{ agent: AgentResponse }> = ({ agent }) => {
+    const createdAtText = agent.createdAt
+        ? formatDistanceToNow(new Date(agent.createdAt), { addSuffix: true })
+        : null;
+
+    return (
+        <Stack spacing={0.75}>
+            {agent.description && (
+                <Tooltip title={agent.description} placement="bottom-start">
+                    <Typography variant="body2" color="text.secondary"
+                        sx={{
+                            overflow: "hidden",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            maxWidth: "50%",
+                        }}>
+                        {agent.description}
+                    </Typography>
+                </Tooltip>
+            )}
+            {createdAtText && (
+                <MetadataItem icon={<Clock size={12} />} label="Created" value={createdAtText} />
+            )}
+        </Stack>
+    );
+};
+
 export function AgentOverview() {
-  const { orgId, agentId, projectId } = useParams();
-  const [editAgentDrawerOpen, setEditAgentDrawerOpen] = useState(false);
-  const { data: agent, isLoading: isAgentLoading } = useGetAgent({
-    orgName: orgId,
-    projName: projectId,
-    agentName: agentId,
-  });
+    const { orgId, agentId, projectId } = useParams();
+    const [editAgentDrawerOpen, setEditAgentDrawerOpen] = useState(false);
+    const { data: agent, isLoading: isAgentLoading } = useGetAgent({
+        orgName: orgId,
+        projName: projectId,
+        agentName: agentId,
+    });
 
-  return (
-    <>
-      <PageLayout
-        title={agent?.displayName ?? "Agent"}
-        description={agent?.description ?? "No description provided."}
-        isLoading={isAgentLoading}
-        titleTail={
-          <>
-            <Tooltip title="Edit Agent">
-              <IconButton
-                color="primary"
-                size="small"
-                onClick={() => setEditAgentDrawerOpen(true)}
-                disabled={!agent}
-              >
-                <Edit size={18} />
-              </IconButton>
-            </Tooltip>
-            <Chip
-              label={displayProvisionTypes(agent?.provisioning?.type)}
-              color="default"
-              size="small"
-              variant="outlined"
-            />
-          </>
-        }
-      >
-        {isAgentLoading ? (
-          <AgentOverviewSkeleton />
-        ) : (
-          <Box display="flex" flexDirection="column" gap={4}>
-            {agent?.provisioning?.type === "internal" && <InternalAgentOverview />}
-            {agent?.provisioning?.type === "external" && <ExternalAgentOverview />}
-          </Box>
-        )}
-      </PageLayout>
+    return (
+        <>
+            <PageLayout
+                title={agent?.displayName ?? "Agent"}
+                description={agent ? <AgentDescription agent={agent} /> : undefined}
+                isLoading={isAgentLoading}
+                titleTail={
+                    <Chip
+                        label={displayProvisionTypes(agent?.provisioning?.type)}
+                        color="default"
+                        size="small"
+                        variant="outlined"
+                    />
+                }
+                actions={
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<Edit size={16} />}
+                        onClick={() => setEditAgentDrawerOpen(true)}
+                        disabled={!agent}
+                    >
+                        Edit
+                    </Button>
+                }
+            >
+                {isAgentLoading ? (
+                    <AgentOverviewSkeleton />
+                ) : (
+                    <Box display="flex" flexDirection="column" gap={4}>
+                        {agent?.provisioning?.type === "internal" && <InternalAgentOverview />}
+                        {agent?.provisioning?.type === "external" && <ExternalAgentOverview />}
+                    </Box>
+                )}
+            </PageLayout>
 
-      {agent && (
-        <EditAgentDrawer
-          open={editAgentDrawerOpen}
-          onClose={() => setEditAgentDrawerOpen(false)}
-          agent={agent}
-          orgId={orgId || "default"}
-          projectId={projectId || "default"}
-        />
-      )}
-    </>
-  );
+            {agent && (
+                <EditAgentDrawer
+                    open={editAgentDrawerOpen}
+                    onClose={() => setEditAgentDrawerOpen(false)}
+                    agent={agent}
+                    orgId={orgId || "default"}
+                    projectId={projectId || "default"}
+                />
+            )}
+        </>
+    );
 }

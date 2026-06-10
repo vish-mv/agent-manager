@@ -17,22 +17,17 @@
  */
 
 import React, { useCallback, useMemo } from "react";
-import { PageLayout, TimeRangeSelector, useTimeRangeParams } from "@agent-management-platform/views";
+import { NoDataFound, PageLayout, TimeRangeSelector, useTimeRangeParams } from "@agent-management-platform/views";
 import { useParams, useSearchParams } from "react-router-dom";
-import {
-  TraceListTimeRange,
-  getTimeRange,
-} from "@agent-management-platform/types";
-import { useGetAgentMetrics } from "@agent-management-platform/api-client";
+import { TraceListTimeRange } from "@agent-management-platform/types";
+import { useGetAgentMetrics, useListAgentDeployments } from "@agent-management-platform/api-client";
 import { MetricsView } from "./components/MetricsView/MetricsView";
 import {
   CircularProgress,
   IconButton,
   Stack,
 } from "@wso2/oxygen-ui";
-import {
-  RefreshCcw,
-} from "@wso2/oxygen-ui-icons-react";
+import { PauseCircle, RefreshCcw } from "@wso2/oxygen-ui-icons-react";
 
 const TIME_RANGE_OPTIONS = [
   { value: TraceListTimeRange.TEN_MINUTES, label: "10 Minutes" },
@@ -60,25 +55,24 @@ export const MetricsComponent: React.FC = () => {
       hasCustomRange
         ? undefined
         : (Object.values(TraceListTimeRange) as string[]).includes(
-            searchParams.get("timeRange") ?? "",
-          )
+          searchParams.get("timeRange") ?? "",
+        )
           ? (searchParams.get("timeRange") as TraceListTimeRange)
           : TraceListTimeRange.ONE_HOUR,
     [searchParams, hasCustomRange],
   );
 
-  const timeRangeWindow = useMemo(
-    () => (timeRange ? getTimeRange(timeRange) : undefined),
-    [timeRange],
+  const { data: deployments } = useListAgentDeployments(
+    { orgName: orgId, projName: projectId, agentName: agentId },
   );
+  const isSuspended = deployments === undefined ? undefined : deployments[envId ?? ""]?.status === "suspended";
 
   const metricsFilterRequest = useMemo(
     () => ({
       environmentName: envId ?? "",
-      startTime: hasCustomRange ? customStartTime! : (timeRangeWindow?.startTime ?? ""),
-      endTime: hasCustomRange ? customEndTime! : (timeRangeWindow?.endTime ?? ""),
+      ...(hasCustomRange ? { startTime: customStartTime!, endTime: customEndTime! } : {}),
     }),
-    [envId, hasCustomRange, customStartTime, customEndTime, timeRangeWindow],
+    [envId, hasCustomRange, customStartTime, customEndTime],
   );
 
   const {
@@ -91,12 +85,10 @@ export const MetricsComponent: React.FC = () => {
     { agentName: agentId, orgName: orgId, projName: projectId },
     metricsFilterRequest,
     {
-      enabled:
-        !!agentId &&
-        !!orgId &&
-        !!projectId &&
-        !!envId &&
-        (hasCustomRange || !!timeRangeWindow),
+      enabled: isSuspended === false && !!agentId && !!orgId &&
+        !!projectId && !!envId && (hasCustomRange || !!timeRange),
+      enableAutoRefresh: !hasCustomRange,
+      timeRange: hasCustomRange ? undefined : timeRange,
     }
   );
 
@@ -116,42 +108,50 @@ export const MetricsComponent: React.FC = () => {
   );
 
   return (
-      <PageLayout
-        title="Metrics"
-        disableIcon
-        actions={
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-            <TimeRangeSelector
-              preset={timeRange}
-              customStart={customStartTime}
-              customEnd={customEndTime}
-              options={TIME_RANGE_OPTIONS}
-              onPresetChange={handleTimeRangeChange}
-              onCustomRangeApply={handleCustomRangeApply}
-            />
+    <PageLayout
+      title="Metrics"
+      disableIcon
+      actions={
+        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <TimeRangeSelector
+            preset={timeRange}
+            customStart={customStartTime}
+            customEnd={customEndTime}
+            options={TIME_RANGE_OPTIONS}
+            onPresetChange={handleTimeRangeChange}
+            onCustomRangeApply={handleCustomRangeApply}
+          />
 
-            {/* Refresh Button */}
-            <IconButton
-              size="small"
-              disabled={isRefetching}
-              onClick={handleRefresh}
-              aria-label="Refresh"
-            >
-              {isRefetching ? (
-                <CircularProgress size={16} />
-              ) : (
-                <RefreshCcw size={16} />
-              )}
-            </IconButton>
-          </Stack>
-        }
-      >
+          {/* Refresh Button */}
+          <IconButton
+            size="small"
+            disabled={isRefetching}
+            onClick={handleRefresh}
+            aria-label="Refresh"
+          >
+            {isRefetching ? (
+              <CircularProgress size={16} />
+            ) : (
+              <RefreshCcw size={16} />
+            )}
+          </IconButton>
+        </Stack>
+      }
+    >
+      {isSuspended ? (
+        <NoDataFound
+          iconElement={PauseCircle}
+          message="Environment Suspended"
+          subtitle="Metrics are unavailable while the environment is suspended."
+        />
+      ) : (
         <MetricsView
           metrics={metrics}
           isLoading={isLoading}
           error={error}
         />
-      </PageLayout>
+      )}
+    </PageLayout>
 
   );
 };

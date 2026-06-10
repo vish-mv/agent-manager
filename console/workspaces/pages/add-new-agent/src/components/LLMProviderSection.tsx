@@ -503,6 +503,8 @@ interface LLMProviderSectionProps {
   llmProviders: LLMProviderFormEntry[];
   setLLMProviders: React.Dispatch<React.SetStateAction<LLMProviderFormEntry[]>>;
   agentDisplayName: string;
+  initialEnvironmentName: string | undefined;
+  isInitialEnvironmentLoading?: boolean;
   externalEnvKeys?: Set<string>;
 }
 
@@ -510,6 +512,8 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
   llmProviders,
   setLLMProviders,
   agentDisplayName,
+  initialEnvironmentName,
+  isInitialEnvironmentLoading = false,
   externalEnvKeys = new Set(),
 }) => {
   const { orgId } = useParams<{ orgId: string }>();
@@ -526,8 +530,15 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
 
   const { data: environments = [], isLoading: envsLoading } =
     useListEnvironments({ orgName: orgId });
-  const drawerEnvironmentId =
-    editingIndex !== null ? environments.find((e) => e.name === drawerEnvName)?.id : undefined;
+  const targetEnvironments = useMemo(
+    () => initialEnvironmentName
+      ? environments.filter((env) => env.name === initialEnvironmentName)
+      : [],
+    [environments, initialEnvironmentName],
+  );
+  const drawerEnvironmentId = drawerEnvName
+    ? environments.find((e) => e.name === drawerEnvName)?.id
+    : undefined;
   const { data: catalogData, isLoading: catalogLoading } = useListCatalogLLMProviders(
     { orgName: orgId },
     { limit: 50, environmentId: drawerEnvironmentId },
@@ -578,9 +589,12 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
   }, []);
 
   const handleAddNew = useCallback(() => {
+    const targetEnvironmentName = targetEnvironments[0]?.name;
+    if (!targetEnvironmentName) return;
     setEditingIndex(null);
+    setDrawerEnvName(targetEnvironmentName);
     setProviderDrawerOpen(true);
-  }, []);
+  }, [targetEnvironments]);
 
   const handleDrawerClose = useCallback(() => {
     if (searchTimerRef.current) {
@@ -596,11 +610,9 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
     (providerUuid: string, providerHandle: string) => {
       setLLMProviders((prev) => {
         if (editingIndex === null) {
-          // Adding a new entry — assign this provider to all environments.
-          // Guard: environments must be loaded before creating env mappings.
-          if (environments.length === 0) return prev;
+          if (targetEnvironments.length === 0) return prev;
           const selectedProviderByEnv: LLMProviderFormEntry["selectedProviderByEnv"] = {};
-          for (const env of environments) {
+          for (const env of targetEnvironments) {
             selectedProviderByEnv[env.name] = { uuid: providerUuid, handle: providerHandle };
           }
           const newIndex = prev.length;
@@ -636,7 +648,7 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
       setProviderSearchQuery("");
       setDebouncedSearch("");
     },
-    [editingIndex, drawerEnvName, environments, agentNameUpper, setLLMProviders],
+    [editingIndex, drawerEnvName, targetEnvironments, agentNameUpper, setLLMProviders],
   );
 
   const handleRemoveEntry = useCallback(
@@ -686,7 +698,7 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
               index={index}
               providers={providers}
               templateMap={templateMap}
-              environments={environments}
+              environments={targetEnvironments}
               agentNameUpper={agentNameUpper}
               usedVarNames={usedVarNames}
               onOpenDrawer={handleOpenDrawer}
@@ -702,7 +714,12 @@ export const LLMProviderSection: React.FC<LLMProviderSectionProps> = ({
               size="small"
               startIcon={<Plus size={16} />}
               onClick={handleAddNew}
-              disabled={envsLoading || catalogLoading }
+              disabled={
+                envsLoading ||
+                isInitialEnvironmentLoading ||
+                catalogLoading ||
+                targetEnvironments.length === 0
+              }
             >
               Add
             </Button>

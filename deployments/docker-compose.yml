@@ -123,17 +123,21 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - AUTH_CLIENT_ID=null
-      - AUTH_BASE_URL=null
-      - SIGN_IN_REDIRECT_URL=null
-      - SIGN_OUT_REDIRECT_URL=null
-      - AUTH_SCOPES=openid profile email org:view org:modify-settings org:invite-member org:remove-member org:assign-role org:manage-idp org:manage-service-account project:create project:read project:update project:delete environment:create environment:read environment:update environment:delete gateway:create gateway:read gateway:update gateway:delete gateway:token:manage data-plane:read deployment-pipeline:read git-secret:create git-secret:read git-secret:delete llm-provider-template:create llm-provider-template:read llm-provider-template:update llm-provider-template:delete llm-provider:create llm-provider:read llm-provider:update llm-provider:delete llm-provider:configure-guardrail llm-provider:connect llm-provider:deploy llm-provider:api-key:manage mcp-server:create mcp-server:read mcp-server:update mcp-server:delete mcp-server:configure-guardrail mcp-server:connect llm-proxy:create llm-proxy:read llm-proxy:update llm-proxy:delete llm-proxy:deploy llm-proxy:api-key:manage evaluator:create evaluator:read evaluator:update evaluator:delete agent:create agent:read agent:update agent:delete agent:build agent:deploy:non-production agent:deploy:production agent:promote agent:rollback agent:suspend agent:token:manage monitor:create monitor:read monitor:update monitor:delete monitor:execute monitor:score:read monitor:score:publish observability:org-dashboard observability:project-dashboard observability:guardrail-metric observability:infra-metric role:create role:read role:update role:delete group:create group:read group:update group:delete catalog:read repository:read agent-kind:read agent-kind:create agent-kind:update agent-kind:delete
+      - AUTH_CLIENT_ID=amp-console-client
+      - AUTH_BASE_URL=http://thunder.amp.localhost:8080
+      - SIGN_IN_REDIRECT_URL=http://localhost:3000/login
+      - SIGN_OUT_REDIRECT_URL=http://localhost:3000/login
       - API_BASE_URL=http://localhost:9000
       - DISABLE_AUTH=false
+      - AUTH_SCOPES=openid profile email org:view org:modify-settings org:invite-member org:remove-member org:assign-role org:manage-idp org:manage-service-account project:create project:read project:update project:delete environment:create environment:read environment:update environment:delete gateway:create gateway:read gateway:update gateway:delete gateway:token:manage data-plane:read deployment-pipeline:read git-secret:create git-secret:read git-secret:delete llm-provider-template:create llm-provider-template:read llm-provider-template:update llm-provider-template:delete llm-provider:create llm-provider:read llm-provider:update llm-provider:delete llm-provider:configure-guardrail llm-provider:connect llm-provider:deploy llm-provider:api-key:manage mcp-server:create mcp-server:read mcp-server:update mcp-server:delete mcp-server:configure-guardrail mcp-server:connect llm-proxy:create llm-proxy:read llm-proxy:update llm-proxy:delete llm-proxy:deploy llm-proxy:api-key:manage evaluator:create evaluator:read evaluator:update evaluator:delete agent:create agent:read agent:update agent:delete agent:build agent:deploy:non-production agent:deploy:production agent:promote agent:rollback agent:suspend agent:token:manage monitor:create monitor:read monitor:update monitor:delete monitor:execute monitor:score:read monitor:score:publish observability:org-dashboard observability:project-dashboard observability:guardrail-metric observability:infra-metric role:create role:read role:update role:delete group:create group:read group:update group:delete catalog:read repository:read agent-kind:read agent-kind:create agent-kind:update agent-kind:delete
       - RBAC_ENABLED=true
       - OBS_API_BASE_URL=http://localhost:9098
-      - GUARDRAILS_CATALOG_URL=https://db720294-98fd-40f4-85a1-cc6a3b65bc9a-prod.e1-us-east-azure.choreoapis.dev/api-platform/policy-hub-api/policy-hub-public/v1.0/policies?categories=Guardrails
+      - GATEWAY_CONTROL_PLANE_URL=http://localhost:9243
+      - GATEWAY_VERSION=v0.11.0
+      - INSTRUMENTATION_URL=http://localhost:22893/otel
+      - GUARDRAILS_CATALOG_URL=https://db720294-98fd-40f4-85a1-cc6a3b65bc9a-prod.e1-us-east-azure.choreoapis.dev/api-platform/policy-hub-api/policy-hub-public/v1.0/policies?categories=Guardrails,AI&limit=100
       - GUARDRAILS_DEFINITION_BASE_URL=https://db720294-98fd-40f4-85a1-cc6a3b65bc9a-prod.e1-us-east-azure.choreoapis.dev/api-platform/policy-hub-api/policy-hub-public/v1.0/policies
+      - DOCS_URL=https://wso2.github.io/agent-manager/docs/next
     volumes:
       # Mount source code at the SAME absolute path as on the host so that
       # rush/pnpm symlinks in common/temp resolve identically in the container.

@@ -30,7 +30,7 @@ import {
 } from "@wso2/oxygen-ui";
 import {
   Trash,
-  Activity,
+  Monitor,
   AlertTriangle,
   Edit,
 } from "@wso2/oxygen-ui-icons-react";
@@ -194,7 +194,7 @@ export function MonitorTable() {
       <ListingTable.Container>
         {toolbar}
         <ListingTable.EmptyState
-          illustration={<Activity size={64} />}
+          illustration={<Monitor size={64} />}
           title="No monitors yet"
           description="Create a monitor to start tracking your evaluations."
         />
@@ -207,7 +207,7 @@ export function MonitorTable() {
       <ListingTable.Container>
         {toolbar}
         <ListingTable.EmptyState
-          illustration={<Activity size={64} />}
+          illustration={<Monitor size={64} />}
           title="No monitors match your search"
           description="Try adjusting your search keywords."
         />

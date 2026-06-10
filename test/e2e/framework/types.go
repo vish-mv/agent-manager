@@ -152,8 +152,9 @@ type EnvironmentVariableConfig struct {
 }
 
 type ModelConfigRequest struct {
-	EnvMappings          map[string]EnvModelConfigRequest `json:"envMappings"`
-	EnvironmentVariables []EnvironmentVariableConfig      `json:"environmentVariables,omitempty"`
+	ProviderName         string                      `json:"providerName"`
+	Configuration        map[string]interface{}      `json:"configuration,omitempty"`
+	EnvironmentVariables []EnvironmentVariableConfig `json:"environmentVariables,omitempty"`
 }
 
 type CreateAgentRequest struct {

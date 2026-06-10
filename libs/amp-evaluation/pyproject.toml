@@ -61,7 +61,7 @@ target-version = "py39"
 exclude = ["samples/"]
 
 [[tool.mypy.overrides]]
-module = ["deepeval.*", "any_llm.*", "boto3.*", "httpx.*"]
+module = ["deepeval.*", "any_llm.*", "boto3.*", "botocore.*", "httpx.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

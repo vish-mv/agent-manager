@@ -17,187 +17,103 @@
  */
 
 import {
-  useGetAgent,
-  useGetAgentBuilds,
-  useListEnvironments,
+    useGetAgent,
+    useGetAgentBuilds,
+    useListEnvironments,
 } from "@agent-management-platform/api-client";
 import {
-  Clock as AccessTime,
-  GitHub,
-  CheckCircle,
-} from "@wso2/oxygen-ui-icons-react";
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Typography,
-  useTheme,
+    Box,
+    Stack,
 } from "@wso2/oxygen-ui";
-import { generatePath, Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useMemo } from "react";
-import { formatDistanceToNow } from "date-fns";
+
 import { EnvironmentCard } from "@agent-management-platform/shared-component";
-import { absoluteRouteMap } from "@agent-management-platform/types";
 import { KindInfoCard } from "./KindInfoCard";
+import { EvalMonitorsCard } from "./EvalMonitorsCard";
+import { EnvObservabilitySection } from "./EnvObservabilitySection";
+import { AgentInfoCard } from "./AgentInfoCard";
 
 export const InternalAgentOverview = () => {
-  const { orgId, agentId, projectId } = useParams();
-  const { data: agent } = useGetAgent({
-    orgName: orgId,
-    projName: projectId,
-    agentName: agentId,
-  });
-  const { data: buildList } = useGetAgentBuilds({
-    orgName: orgId,
-    projName: projectId,
-    agentName: agentId,
-  });
-  const { data: environmentList } = useListEnvironments({
-    orgName: orgId,
-  });
-  const theme = useTheme();
-
-  const sortedEnvironmentList = useMemo(() => {
-    return environmentList?.sort((_a, b) => {
-      if (b.isProduction) {
-        return -1;
-      }
-      return 0;
+    const { orgId, agentId, projectId } = useParams();
+    const { data: agent } = useGetAgent({
+        orgName: orgId,
+        projName: projectId,
+        agentName: agentId,
     });
-  }, [environmentList]);
+    const { data: buildList, isLoading: isBuildsLoading } = useGetAgentBuilds({
+        orgName: orgId,
+        projName: projectId,
+        agentName: agentId,
+    });
+    const { data: environmentList } = useListEnvironments({
+        orgName: orgId,
+    });
 
-  const isKindAgent = !!agent?.kindName;
+    const sortedEnvironmentList = useMemo(() => {
+        return [...(environmentList ?? [])].sort((_a, b) => {
+            if (b.isProduction) return -1;
+            return 0;
+        });
+    }, [environmentList]);
 
-  const createdAtText = agent?.createdAt
-    ? formatDistanceToNow(new Date(agent.createdAt), { addSuffix: true })
-    : "—";
+    const isKindAgent = !!agent?.kindName;
 
-  const repositoryUrl = useMemo(() => {
-    const { appPath, branch, url } = agent?.provisioning?.repository ?? {};
-
-    // If appPath is "/" (root), don't append it to avoid double slashes
-    // Otherwise, remove the leading slash from appPath before appending
-    if (appPath && appPath !== '/') {
-      const normalizedPath = appPath.startsWith('/') ? appPath.substring(1) : appPath;
-      return `${url}/tree/${branch}/${normalizedPath}`;
-    }
-    return `${url}/tree/${branch}`;
-  }, [agent?.provisioning?.repository]);
-
-  const loadingBuilds = useMemo(() => {
-    return buildList?.builds.filter(
-      (build) =>
-        build.status === "Running" || build.status === "Pending"
-    );
-  }, [buildList]);
-
-  return (
-    <Box display="flex" flexDirection="column" gap={2}>
-      <Box
-        sx={{
-          maxWidth: "fit-content",
-          gap: 2,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <Box display="flex" flexDirection="row" gap={1} alignItems="center">
-          <Typography variant="body2">Created</Typography>
-          <AccessTime size={14} />
-          <Typography variant="body2">{createdAtText}</Typography>
-        </Box>
-        {isKindAgent ? (
-          <KindInfoCard
-            orgId={orgId ?? ""}
-            kindName={agent!.kindName!}
-          />
-        ) : (
-          <Box display="flex" flexDirection="row" gap={1} alignItems="center">
-            <Typography variant="body2" width={100} noWrap>
-              Source Code:
-            </Typography>
-            <Button
-              component="a"
-              startIcon={
-                <GitHub size={16} color={theme.palette.text.secondary} />
-              }
-              variant="text"
-              color="inherit"
-              size="small"
-              href={repositoryUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Typography variant="body2" noWrap>
-                {repositoryUrl}
-              </Typography>
-            </Button>
-          </Box>
-        )}
-        {!isKindAgent && (<Box display="flex" flexDirection="row" gap={1} alignItems="center">
-          <Typography variant="body2" width={100} noWrap>
-            Build Status:
-          </Typography>
-          {loadingBuilds?.length && loadingBuilds.length > 0 ? (
-            <Button
-              variant="text"
-              size="small"
-              color="inherit"
-              component={Link}
-              to={generatePath(
-                absoluteRouteMap.children.org.children.projects.children.agents
-                  .children.build.path,
-                {
-                  orgId,
-                  projectId,
-                  agentId,
-                }
-              )}
-              startIcon={<CircularProgress size={14} color="inherit" />}
-            >
-              Build In Progress
-            </Button>
-          ) : (
-            <Button
-              variant="text"
-              size="small"
-              color="inherit"
-              component={Link}
-              to={generatePath(
-                absoluteRouteMap.children.org.children.projects.children.agents
-                  .children.build.path,
-                {
-                  orgId,
-                  projectId,
-                  agentId,
-                }
-              )}
-              startIcon={<CheckCircle size={16} />}
-            >
-              Build Completed
-            </Button>
-          )}
-        </Box>
-        )}
-
-      </Box>
-
-      {sortedEnvironmentList && sortedEnvironmentList?.length > 0 && (
-        <>
-          {sortedEnvironmentList.map(
-            (environment) =>
-              environment && (
-                <EnvironmentCard
-                  key={environment.name}
-                  orgId={orgId ?? "default"}
-                  projectId={projectId ?? "default"}
-                  agentId={agentId ?? "default"}
-                  environment={environment}
+    return (
+        <Box display="flex" flexDirection="column" gap={2}>
+            {isKindAgent ? (
+                <KindInfoCard
+                    orgId={orgId ?? ""}
+                    kindName={agent!.kindName!}
+                    framework={agent?.agentType?.type}
+                    model={agent?.agentType?.subType}
                 />
-              )
-          )}
-        </>
-      )}
-    </Box>
-  );
+            ) : (
+                orgId && projectId && agentId && (
+                    <AgentInfoCard
+                        orgId={orgId}
+                        projectId={projectId}
+                        agentId={agentId}
+                        repository={agent?.provisioning?.repository}
+                        latestBuild={buildList?.builds[0]}
+                        isBuildsLoading={isBuildsLoading}
+                        framework={agent?.agentType?.type}
+                        model={agent?.agentType?.subType}
+                        build={agent?.build}
+                    />
+                )
+            )}
+
+            {orgId && projectId && agentId && (
+                <EvalMonitorsCard
+                    orgId={orgId}
+                    projectId={projectId}
+                    agentId={agentId}
+                />
+            )}
+
+            <Stack spacing={2}>
+                {sortedEnvironmentList.map(
+                    (environment) =>
+                        environment && orgId && projectId && agentId && (
+                            <EnvironmentCard
+                                key={environment.name}
+                                orgId={orgId}
+                                projectId={projectId}
+                                agentId={agentId}
+                                environment={environment}
+                                bottomContent={
+                                    <EnvObservabilitySection
+                                        orgId={orgId}
+                                        projectId={projectId}
+                                        agentId={agentId}
+                                        envId={environment.name}
+                                    />
+                                }
+                            />
+                        ),
+                )}
+            </Stack>
+        </Box>
+    );
 };

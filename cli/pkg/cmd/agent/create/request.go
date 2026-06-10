@@ -17,13 +17,10 @@
 package create
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	amsvc "github.com/wso2/agent-manager/cli/pkg/clients/amsvc/gen"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -81,7 +78,7 @@ func Build(opts *CreateOptions) (amsvc.CreateAgentRequest, error) {
 	req.Build = b
 	req.InputInterface = buildInterface(opts)
 	req.Configurations = buildConfig(opts)
-	req.ModelConfig = opts.modelConfig
+	req.ModelConfig = buildModelConfig(opts)
 
 	return req, nil
 }
@@ -198,30 +195,25 @@ func buildConfig(opts *CreateOptions) *amsvc.Configurations {
 	return cfg
 }
 
+func buildModelConfig(opts *CreateOptions) *[]amsvc.ModelConfigRequest {
+	if opts.LLMProvider == "" {
+		return nil
+	}
+	mc := amsvc.ModelConfigRequest{ProviderName: opts.LLMProvider}
+	var evs []amsvc.EnvironmentVariableConfig
+	if opts.LLMURLEnv != "" {
+		evs = append(evs, amsvc.EnvironmentVariableConfig{Key: "url", Name: opts.LLMURLEnv})
+	}
+	if opts.LLMAPIKeyEnv != "" {
+		evs = append(evs, amsvc.EnvironmentVariableConfig{Key: "apikey", Name: opts.LLMAPIKeyEnv})
+	}
+	if len(evs) > 0 {
+		mc.EnvironmentVariables = &evs
+	}
+	return &[]amsvc.ModelConfigRequest{mc}
+}
+
 func splitEnv(entry string) (string, string) {
 	k, v, _ := strings.Cut(entry, "=")
 	return k, v
-}
-
-func loadModelConfig(path string) (*[]amsvc.ModelConfigRequest, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("%v", err)
-	}
-	// yaml.v3 doesn't honour json struct tags, so we unmarshal into a generic
-	// value first, re-encode as JSON, then decode using encoding/json which
-	// does honour json tags.
-	var raw interface{}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse error: %v", err)
-	}
-	jsonBytes, err := json.Marshal(raw)
-	if err != nil {
-		return nil, fmt.Errorf("re-encode error: %v", err)
-	}
-	var configs []amsvc.ModelConfigRequest
-	if err := json.Unmarshal(jsonBytes, &configs); err != nil {
-		return nil, fmt.Errorf("parse error: %v", err)
-	}
-	return &configs, nil
 }

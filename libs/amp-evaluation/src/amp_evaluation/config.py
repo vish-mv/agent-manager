@@ -95,6 +95,23 @@ class LLMJudgeConfig(BaseSettings):
         description="Optional gateway API key, injected as the 'api-key' auth header when api_base is set",
     )
 
+    azure_openai_api_version: str = Field(
+        default="2024-10-21",
+        description=(
+            "Azure OpenAI api-version for judge routing. The SDK's default 'preview' alias is "
+            "incompatible with the deployment-path URL, so a dated GA version is pinned; it may "
+            "differ per Azure resource."
+        ),
+    )
+
+    azure_foundry_api_version: str = Field(
+        default="",
+        description=(
+            "Azure AI Foundry (azure-ai-inference) api-version. Empty leaves the SDK default in place; "
+            "set it only if a Foundry resource requires a specific version."
+        ),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="AMP_LLM_JUDGE_",
         env_file=".env",

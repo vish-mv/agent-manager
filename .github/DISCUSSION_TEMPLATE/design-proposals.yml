@@ -55,6 +55,22 @@ body:
       required: true
 
   - type: textarea
+    id: component-assessment
+    attributes:
+      label: MCP, CLI, and Skill Components
+      description: Does this feature need MCP, CLI, or skill components? Provide an argument for and against each relevant component.
+      value: |
+        | Component | Required (yes/no) | Reason |
+        |-----------|-------------------|--------|
+        | MCP       |                   |        |
+        | CLI       |                   |        |
+        | Skill     |                   |        |
+
+        **Decision**: Summarize which components are in scope and why.
+    validations:
+      required: true
+
+  - type: textarea
     id: alternatives
     attributes:
       label: Alternatives Considered

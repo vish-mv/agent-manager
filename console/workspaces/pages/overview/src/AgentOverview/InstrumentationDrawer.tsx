@@ -38,7 +38,7 @@ interface InstrumentationDrawerProps {
   agentName: string;
   environment?: string;
   instrumentationUrl: string;
-  apiKey: string;
+  apiKey?: string;
   componentUid?: string;
   environmentUid?: string;
 }

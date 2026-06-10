@@ -42,6 +42,7 @@ import (
 type AgentConfigurationService interface {
 	Create(ctx context.Context, orgName, projectName, agentID string,
 		req models.CreateAgentModelConfigRequest, createdBy string) (*models.AgentModelConfigResponse, error)
+	ValidateProvidersInCatalog(ctx context.Context, orgName string, providerHandles []string) error
 	Get(ctx context.Context, configUUID uuid.UUID, orgName, projectName, agentName string) (*models.AgentModelConfigResponse, error)
 	GetByAgent(ctx context.Context, agentID, orgName string) (*models.AgentModelConfigResponse, error)
 	List(ctx context.Context, orgName, projectName, agentName string, limit, offset int) (*models.AgentModelConfigListResponse, error)
@@ -250,6 +251,36 @@ func (s *agentConfigurationService) compensatingDeleteConfig(ctx context.Context
 	}
 }
 
+// ValidateProvidersInCatalog verifies each handle resolves to an existing provider
+// that is in catalog. Returns ErrLLMProviderNotFound (missing) or ErrInvalidInput
+// (empty handle / not in catalog). Handles are deduped.
+func (s *agentConfigurationService) ValidateProvidersInCatalog(
+	_ context.Context, orgName string, providerHandles []string,
+) error {
+	seen := make(map[string]struct{}, len(providerHandles))
+	for _, handle := range providerHandles {
+		if handle == "" {
+			return fmt.Errorf("%w: provider name is required", utils.ErrInvalidInput)
+		}
+		if _, dup := seen[handle]; dup {
+			continue
+		}
+		seen[handle] = struct{}{}
+
+		provider, err := s.llmProviderRepo.GetByHandle(handle, orgName)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("provider %s not found: %w", handle, utils.ErrLLMProviderNotFound)
+			}
+			return fmt.Errorf("failed to validate provider %s: %w", handle, err)
+		}
+		if !provider.InCatalog {
+			return fmt.Errorf("%w: provider %s must be in catalog", utils.ErrInvalidInput, handle)
+		}
+	}
+	return nil
+}
+
 // Create creates a new agent model configuration
 func (s *agentConfigurationService) Create(ctx context.Context, orgName, projectName, agentID string,
 	req models.CreateAgentModelConfigRequest, createdBy string,
@@ -283,19 +314,13 @@ func (s *agentConfigurationService) Create(ctx context.Context, orgName, project
 		return nil, errors.Join(utils.ErrInvalidInput, err)
 	}
 
-	// Validate all providers exist and are in catalog
-	for envName, envMapping := range req.EnvMappings {
-		provider, err := s.llmProviderRepo.GetByHandle(envMapping.ProviderName, orgName)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				s.logger.Warn("Provider not found", "env", envName, "error", err)
-				return nil, fmt.Errorf("provider for environment %s not found: %w", envName, utils.ErrLLMProviderNotFound)
-			}
-			return nil, fmt.Errorf("failed to validate provider for environment %s: %w", envName, err)
-		}
-		if !provider.InCatalog {
-			return nil, fmt.Errorf("%w: provider %s must be in catalog for environment %s", utils.ErrInvalidInput, envMapping.ProviderName, envName)
-		}
+	// Validate all providers exist and are in catalog (shared with the create-time preflight).
+	handles := make([]string, 0, len(req.EnvMappings))
+	for _, envMapping := range req.EnvMappings {
+		handles = append(handles, envMapping.ProviderName)
+	}
+	if err := s.ValidateProvidersInCatalog(ctx, orgName, handles); err != nil {
+		return nil, err
 	}
 
 	// Validate environment UUIDs exist

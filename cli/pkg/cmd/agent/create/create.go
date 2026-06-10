@@ -69,9 +69,10 @@ type CreateOptions struct {
 	Env                        []string
 	EnvSecret                  []string
 	EnvFromSecret              []string
-	ModelConfigFile            string
 
-	modelConfig *[]amsvc.ModelConfigRequest
+	LLMProvider  string
+	LLMURLEnv    string
+	LLMAPIKeyEnv string
 }
 
 func NewCreateCmd(f *cmdutil.Factory) *cobra.Command {
@@ -132,7 +133,9 @@ func NewCreateCmd(f *cmdutil.Factory) *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.Env, "env", nil, "Environment variable as KEY=VALUE (repeatable)")
 	cmd.Flags().StringSliceVar(&opts.EnvSecret, "env-secret", nil, "Sensitive env variable as KEY=VALUE (repeatable)")
 	cmd.Flags().StringSliceVar(&opts.EnvFromSecret, "env-from-secret", nil, "Env variable from secret as KEY=SECRETNAME (repeatable)")
-	cmd.Flags().StringVar(&opts.ModelConfigFile, "model-config-file", "", "Path to model config YAML/JSON file")
+	cmd.Flags().StringVar(&opts.LLMProvider, "llm-provider", "", "Handle of a configured LLM provider to attach (internal only)")
+	cmd.Flags().StringVar(&opts.LLMURLEnv, "llm-url-env", "", "Env var name for the provider URL (default: auto-generated)")
+	cmd.Flags().StringVar(&opts.LLMAPIKeyEnv, "llm-api-key-env", "", "Env var name for the provider API key (default: auto-generated)")
 
 	_ = cmd.RegisterFlagCompletionFunc("provisioning", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{provisioningInternal, provisioningExternal}, cobra.ShellCompDirectiveNoFileComp
@@ -148,14 +151,6 @@ func NewCreateCmd(f *cmdutil.Factory) *cobra.Command {
 }
 
 func runCreate(ctx context.Context, opts *CreateOptions) error {
-	if opts.ModelConfigFile != "" {
-		mc, err := loadModelConfig(opts.ModelConfigFile)
-		if err != nil {
-			return render.Error(opts.IO, opts.Scope, clierr.Newf(clierr.InvalidFlag, "--model-config-file: %s", err))
-		}
-		opts.modelConfig = mc
-	}
-
 	req, err := Build(opts)
 	if err != nil {
 		return render.Error(opts.IO, opts.Scope, err)
@@ -171,7 +166,7 @@ func runCreate(ctx context.Context, opts *CreateOptions) error {
 		return render.Error(opts.IO, opts.Scope, clierr.Newf(clierr.Transport, "%v", err))
 	}
 	if resp.JSON202 == nil {
-		return render.Error(opts.IO, opts.Scope, cmdutil.ErrorFromServer(resp.HTTPResponse, cmdutil.FirstNonNil(resp.JSON400, resp.JSON409, resp.JSON500)))
+		return render.Error(opts.IO, opts.Scope, cmdutil.ErrorFromServer(resp.HTTPResponse, cmdutil.FirstNonNil(resp.JSON400, resp.JSON404, resp.JSON409, resp.JSON500)))
 	}
 
 	if !opts.IO.JSON {

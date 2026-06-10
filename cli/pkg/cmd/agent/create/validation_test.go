@@ -18,8 +18,6 @@ package create
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -124,7 +122,7 @@ func TestValidate_ExternalRejectsInternalOnlyFlags(t *testing.T) {
 	opts.EnvSecret = []string{"BAZ=quux"}
 	opts.EnvFromSecret = []string{"QUUX=secret-name"}
 	opts.DisableAutoInstrumentation = true
-	opts.ModelConfigFile = "models.yaml"
+	opts.LLMProvider = "openai"
 
 	err := validate(opts)
 	details := mustFlagDetails(t, err)
@@ -146,7 +144,7 @@ func TestValidate_ExternalRejectsInternalOnlyFlags(t *testing.T) {
 		"--env-secret is not allowed for external provisioning",
 		"--env-from-secret is not allowed for external provisioning",
 		"--no-auto-instrumentation is not allowed for external provisioning",
-		"--model-config-file is not allowed for external provisioning",
+		"--llm-provider is not allowed for external provisioning",
 	} {
 		assertContains(t, details, msg)
 	}
@@ -378,44 +376,32 @@ func TestValidate_ValidEnv(t *testing.T) {
 	}
 }
 
-func TestValidate_ModelConfigFileMissing(t *testing.T) {
+func TestValidate_LLMEnvFlagsRequireProvider(t *testing.T) {
 	opts := validBuildpackOpts()
-	opts.ModelConfigFile = "/nonexistent/model-config.yaml"
+	opts.LLMURLEnv = "MY_URL"
 	err := validate(opts)
 	details := mustFlagDetails(t, err)
-	assertContains(t, details, "--model-config-file: ")
+	assertContains(t, details, "--llm-url-env/--llm-api-key-env require --llm-provider")
 }
 
-func TestValidate_ModelConfigFileInvalid(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "bad.yaml")
-	if err := os.WriteFile(path, []byte("not: a: list: ["), 0644); err != nil {
-		t.Fatalf("write temp file: %v", err)
-	}
+func TestValidate_LLMProviderValid(t *testing.T) {
 	opts := validBuildpackOpts()
-	opts.ModelConfigFile = path
-	err := validate(opts)
-	details := mustFlagDetails(t, err)
-	assertContains(t, details, "--model-config-file: ")
-}
-
-func TestValidate_ModelConfigFileValid(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "model.yaml")
-	content := `- envMappings:
-    dev:
-      providerName: openai
-      configuration:
-        policies: []
-`
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatalf("write temp file: %v", err)
-	}
-	opts := validBuildpackOpts()
-	opts.ModelConfigFile = path
+	opts.LLMProvider = "openai"
+	opts.LLMURLEnv = "MY_URL"
+	opts.LLMAPIKeyEnv = "MY_KEY"
 	if err := validate(opts); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestValidate_ExternalRejectsLLMEnvFlags(t *testing.T) {
+	opts := validExternalOpts()
+	opts.LLMURLEnv = "MY_URL"
+	opts.LLMAPIKeyEnv = "MY_KEY"
+	err := validate(opts)
+	details := mustFlagDetails(t, err)
+	assertContains(t, details, "--llm-url-env is not allowed for external provisioning")
+	assertContains(t, details, "--llm-api-key-env is not allowed for external provisioning")
 }
 
 func TestValidate_CustomAPIRequiresBasePathAndOpenAPISpec(t *testing.T) {

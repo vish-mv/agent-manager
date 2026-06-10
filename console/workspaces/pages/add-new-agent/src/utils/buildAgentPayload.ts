@@ -20,32 +20,43 @@ import {
   CreateAgentRequest,
   ModelConfigRequest,
   OrgProjPathParams,
+  PromotionPath,
 } from "@agent-management-platform/types";
 import { AddAgentFormValues, CreateAgentFormValues, LLMProviderFormEntry } from "../form/schema";
 
-function buildOneModelConfig(
-  entry: LLMProviderFormEntry,
-): ModelConfigRequest | null {
-  const envMappings: ModelConfigRequest["envMappings"] = {};
-
-  for (const [envName, provider] of Object.entries(entry.selectedProviderByEnv)) {
-    if (!provider) continue;
-    envMappings[envName] = {
-      providerName: provider.handle,
-      configuration: {
-        policies:
-          entry.guardrails.length > 0
-            ? entry.guardrails.map((g) => ({
-              name: g.name,
-              version: g.version,
-              paths: [{ path: "/*", methods: ["*"], params: g.settings ?? {} }],
-            }))
-            : undefined,
-      },
-    };
+export function findLowestEnvironmentName(
+  promotionPaths: PromotionPath[] = [],
+): string | undefined {
+  const targetEnvironments = new Set<string>();
+  for (const path of promotionPaths) {
+    for (const target of path.targetEnvironmentRefs) {
+      targetEnvironments.add(target.name);
+    }
   }
 
-  if (Object.keys(envMappings).length === 0) return null;
+  return promotionPaths.find(
+    (path) => !targetEnvironments.has(path.sourceEnvironmentRef),
+  )?.sourceEnvironmentRef;
+}
+
+function buildOneModelConfig(
+  entry: LLMProviderFormEntry,
+  initialEnvironmentName: string | undefined,
+): ModelConfigRequest | null {
+  // The create-side config applies only to the component's initial environment.
+  const provider = initialEnvironmentName
+    ? entry.selectedProviderByEnv[initialEnvironmentName]
+    : null;
+  if (!provider) return null;
+
+  const policies =
+    entry.guardrails.length > 0
+      ? entry.guardrails.map((g) => ({
+          name: g.name,
+          version: g.version,
+          paths: [{ path: "/*", methods: ["*"], params: g.settings ?? {} }],
+        }))
+      : undefined;
 
   const environmentVariables = [
     ...(entry.urlVarName ? [{ key: "url", name: entry.urlVarName }] : []),
@@ -53,16 +64,18 @@ function buildOneModelConfig(
   ];
 
   return {
-    envMappings,
+    providerName: provider.handle,
+    ...(policies ? { configuration: { policies } } : {}),
     ...(environmentVariables.length > 0 ? { environmentVariables } : {}),
   };
 }
 
-function buildModelConfig(
+export function buildModelConfig(
   llmProviders: LLMProviderFormEntry[],
+  initialEnvironmentName: string | undefined,
 ): ModelConfigRequest[] | undefined {
   if (!llmProviders.length) return undefined;
-  const configs = llmProviders.map(buildOneModelConfig)
+  const configs = llmProviders.map((entry) => buildOneModelConfig(entry, initialEnvironmentName))
     .filter((c): c is ModelConfigRequest => c !== null);
   return configs.length > 0 ? configs : undefined;
 }
@@ -71,7 +84,10 @@ export const buildAgentCreationPayload = (
   data: AddAgentFormValues,
   params: OrgProjPathParams,
   llmProviders: LLMProviderFormEntry[] = [],
+  initialEnvironmentName?: string,
 ): { params: OrgProjPathParams; body: CreateAgentRequest } => {
+  const modelConfig = buildModelConfig(llmProviders, initialEnvironmentName);
+
   if (data.deploymentType === "new") {
     return {
       params,
@@ -142,8 +158,7 @@ export const buildAgentCreationPayload = (
             }
             : {}),
         },
-        ...((buildModelConfig(llmProviders)) ?
-          { modelConfig: buildModelConfig(llmProviders) } : {}),
+        ...(modelConfig ? { modelConfig } : {}),
       },
     };
   }
@@ -161,7 +176,7 @@ export const buildAgentCreationPayload = (
         type: "external-agent-api",
         subType: "custom-api",
       },
-      ...((buildModelConfig(llmProviders)) ? { modelConfig: buildModelConfig(llmProviders) } : {}),
+      ...(modelConfig ? { modelConfig } : {}),
     },
   };
 };
@@ -172,7 +187,10 @@ export const buildCatalogAgentPayload = (
   kindName: string,
   version: string,
   llmProviders: LLMProviderFormEntry[] = [],
+  initialEnvironmentName?: string,
 ): { params: OrgProjPathParams; body: CreateAgentRequest } => {
+  const modelConfig = buildModelConfig(llmProviders, initialEnvironmentName);
+
   return {
     params,
     body: {
@@ -204,7 +222,7 @@ export const buildCatalogAgentPayload = (
           })),
         enableAutoInstrumentation: data.enableAutoInstrumentation,
       },
-      ...((buildModelConfig(llmProviders)) ? { modelConfig: buildModelConfig(llmProviders) } : {}),
+      ...(modelConfig ? { modelConfig } : {}),
     },
   };
 };

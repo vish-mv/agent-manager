@@ -18,17 +18,31 @@
 
 import { useGetAgentKind } from "@agent-management-platform/api-client";
 import { absoluteRouteMap } from "@agent-management-platform/types";
-import { Box, Button, Card, CardContent, Skeleton, Typography } from "@wso2/oxygen-ui";
-import { ExternalLink } from "@wso2/oxygen-ui-icons-react";
+import {
+    Box,
+    Card,
+    CardContent,
+    Divider,
+    IconButton,
+    Skeleton,
+    Tooltip,
+    Typography,
+} from "@wso2/oxygen-ui";
+import { ExternalLink, Tag } from "@wso2/oxygen-ui-icons-react";
+import { formatDistanceToNow } from "date-fns";
 import React from "react";
 import { generatePath, Link } from "react-router-dom";
 
 interface KindInfoCardProps {
     orgId: string;
     kindName: string;
+    framework?: string;
+    model?: string;
 }
 
-export const KindInfoCard: React.FC<KindInfoCardProps> = ({ orgId, kindName }) => {
+export const KindInfoCard: React.FC<KindInfoCardProps> = ({
+    orgId, kindName, framework, model,
+}) => {
     const { data: kind, isLoading } = useGetAgentKind({ orgName: orgId, kindName });
 
     const kindHref = generatePath(
@@ -36,47 +50,100 @@ export const KindInfoCard: React.FC<KindInfoCardProps> = ({ orgId, kindName }) =
         { orgId, kindId: kindName },
     );
 
-    if (isLoading) {
-        return <Skeleton variant="rounded" height={80} />;
-    }
+    const latestVersionData = kind?.versions?.find((v) => v.version === kind.latestVersion)
+        ?? kind?.versions?.[0];
 
     return (
-        <Card variant="outlined" sx={{ maxWidth: 400, minWidth: 275 }}>
-            <CardContent sx={{ display: "flex", flexDirection: "column", gap: 0.75, "&:last-child": { pb: 1.5 }, pt: 1.5, px: 1.5, pb: 1.5 }}>
-                <Box display="flex" flexDirection="row" gap={1} alignItems="center">
-                    Agent Kind:
-                    <Button
-                        component={Link}
-                        to={kindHref}
-                        variant="text"
-                        color="inherit"
-                        size="small"
-                        sx={{ p: 0, minWidth: 0, fontWeight: 600 }}
-                        endIcon={<ExternalLink size={12} />}
-                    >
-                        <Typography variant="body2" fontWeight={600} noWrap>
-                            {kind?.displayName ?? kindName}
-                        </Typography>
-                    </Button>
+        <Card variant="outlined">
+            <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                <Box pb={1}>
+                    <Typography variant="h6">Kind Details</Typography>
                 </Box>
+                <Divider sx={{ mb: 1.5 }} />
+                <Box display="flex" gap={2} minWidth={0}>
 
-                {kind?.description && (
-                    <Typography variant="caption" color="text.secondary">
-                        {kind.description}
-                    </Typography>
-                )}
+                    <Box flex={1} minWidth={0}>
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}
+                            sx={{ textTransform: "uppercase", letterSpacing: "0.05em", display: "block", mb: 0.75 }}>
+                            Agent Kind
+                        </Typography>
+                        {isLoading ? (
+                            <>
+                                <Skeleton variant="text" width={160} />
+                                <Skeleton variant="text" width={200} sx={{ mt: 0.25 }} />
+                            </>
+                        ) : (
+                            <>
+                                <Box display="flex" alignItems="center" gap={0.5} minWidth={0}>
+                                    <Typography variant="body2" noWrap>
+                                        {kind?.displayName ?? kindName}
+                                    </Typography>
+                                    <IconButton
+                                        size="small"
+                                        component={Link}
+                                        to={kindHref}
+                                        sx={{ p: 0.25, flexShrink: 0 }}
+                                    >
+                                        <ExternalLink size={12} />
+                                    </IconButton>
+                                </Box>
+                                {kind?.description && (
+                                    <Tooltip title={kind.description} placement="bottom-start">
+                                        <Typography variant="caption" color="text.secondary" mt={0.25}
+                                            sx={{
+                                                overflow: "hidden",
+                                                display: "-webkit-box",
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: "vertical",
+                                            }}>
+                                            {kind.description}
+                                        </Typography>
+                                    </Tooltip>
+                                )}
+                            </>
+                        )}
+                    </Box>
 
-                <Box display="flex" flexDirection="row" gap={1} flexWrap="wrap">
-                    {kind?.latestVersion && (
-                        <Typography variant="caption" color="text.secondary">
-                            Latest: v{kind.latestVersion}
+                    <Divider orientation="vertical" flexItem />
+
+                    <Box flex={1} minWidth={0}>
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}
+                            sx={{ textTransform: "uppercase", letterSpacing: "0.05em", display: "block", mb: 0.75 }}>
+                            Latest Release
                         </Typography>
-                    )}
-                    {kind?.versions?.length != null && (
-                        <Typography variant="caption" color="text.secondary">
-                            · {kind.versions.length} version{kind.versions.length !== 1 ? "s" : ""}
-                        </Typography>
-                    )}
+                        {isLoading ? (
+                            <Skeleton variant="rounded" height={28} />
+                        ) : !latestVersionData ? (
+                            <Typography variant="body2" color="text.secondary">No versions yet.</Typography>
+                        ) : (
+                            <Box display="flex" alignItems="center" gap={1.5} minWidth={0}>
+                                <Box display="flex" alignItems="center" gap={0.5} sx={{ flexShrink: 0 }}>
+                                    <Tag size={13} />
+                                    <Typography variant="body2" color="text.secondary" noWrap>
+                                        v{latestVersionData.version}
+                                    </Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary" noWrap flex={1}>
+                                    {formatDistanceToNow(
+                                        new Date(latestVersionData.createdAt), { addSuffix: true },
+                                    )}
+                                </Typography>
+                                {(framework || model) && (
+                                    <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
+                                        {`Agent Type: ${[framework, model].filter(Boolean).join("/")}`}
+                                    </Typography>
+                                )}
+                                <IconButton
+                                    size="small"
+                                    component={Link}
+                                    to={kindHref}
+                                >
+                                    <ExternalLink size={12} />
+                                </IconButton>
+                            </Box>
+                        )}
+                    </Box>
+
                 </Box>
             </CardContent>
         </Card>

@@ -103,6 +103,7 @@ export function useTraceList(
   sortOrder?: GetTraceListPathParams["sortOrder"] | undefined,
   customStartTime?: string,
   customEndTime?: string,
+  options?: { enableAutoRefresh?: boolean; enabled?: boolean },
 ) {
   const { getToken } = useAuthHooks();
   const hasCustomRange = !!customStartTime && !!customEndTime;
@@ -177,7 +178,7 @@ export function useTraceList(
       }
       return { ...res, traces: applyScores(res.traces, scoreMap), fetchedRange: range };
     },
-    enabled: !!scopeParams && (hasCustomRange || !!timeRange),
+    enabled: (options?.enabled ?? true) && !!scopeParams && (hasCustomRange || !!timeRange),
   });
 
   useEffect(() => {
@@ -379,7 +380,8 @@ export function useTraceList(
   // replacing the whole list. Falls back to a full refetch when the list is
   // empty (e.g. on initial load or after the user clears filters).
   useEffect(() => {
-    if (hasCustomRange || !scopeParams) return;
+    if (hasCustomRange || !scopeParams || options?.enabled === false
+      || !options?.enableAutoRefresh) return;
     const timer = setInterval(() => {
       if (traceListRef.current?.traces?.length) {
         loadNewerRef.current();
@@ -388,7 +390,7 @@ export function useTraceList(
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [hasCustomRange, scopeParams]);
+  }, [hasCustomRange, scopeParams, options?.enabled, options?.enableAutoRefresh]);
 
   return {
     ...queryResult,

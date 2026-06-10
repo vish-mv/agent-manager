@@ -42,6 +42,22 @@ _DEPLOY_FAILED_STREAK = 3
 _HTTP_TIMEOUT_S = 30
 _TOKEN_REFRESH_SKEW_S = 30
 
+# OAuth2 scopes requested in the client_credentials grant. With RBAC_ENABLED=true
+# the service authorizes every route against the token's scopes, and Thunder only
+# puts a scope in a client_credentials token when it is *explicitly requested*
+# (and the app is registered for it + assigned a role that grants it — both done
+# for amp-api-client in the Thunder bootstrap). Omitting `scope` yields a token
+# with no scope claim, so every call 403s. Request exactly the permissions this
+# provisioning flow exercises (create project/agent, read builds+deployments,
+# mint API key, and the teardown deletes). Mirrors how the console requests its
+# scope list. Unauthorised/unknown scopes are silently filtered by Thunder, so
+# this stays a tight, intention-revealing set.
+_TOKEN_SCOPES = (
+    "project:create project:read project:delete "
+    "agent:create agent:read agent:delete agent:build "
+    "agent:deploy:non-production agent:api-key:manage"
+)
+
 # The deployed agent's source is cloned from this repo ref by the in-cluster
 # buildpack. Defaults to wso2/agent-manager@main; overridable (see
 # heavy/driver.py AMP_AGENT_REPO_*) so a PR can validate a new/changed sample
@@ -127,15 +143,17 @@ class AmpClient:
     def access_token(self) -> str:
         """Return a current access token, refreshing within 30s of expiry.
 
-        Mirrors test/e2e/framework/auth.go: POST the token endpoint with
-        `grant_type=client_credentials` and HTTP Basic client credentials.
+        Follows test/e2e/framework/auth.go: POST the token endpoint with
+        `grant_type=client_credentials` and HTTP Basic client credentials, plus
+        an explicit `scope` (see _TOKEN_SCOPES) so the token carries the
+        permissions RBAC checks against.
         """
         if self._token and time.monotonic() < self._token_expires_at - _TOKEN_REFRESH_SKEW_S:
             return self._token
 
         resp = self._session.post(
             self.idp.token_url,
-            data={"grant_type": "client_credentials"},
+            data={"grant_type": "client_credentials", "scope": _TOKEN_SCOPES},
             auth=(self.idp.client_id, self.idp.client_secret),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=_HTTP_TIMEOUT_S,

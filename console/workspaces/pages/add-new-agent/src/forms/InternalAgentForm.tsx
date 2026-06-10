@@ -48,6 +48,8 @@ interface InternalAgentFormProps {
   ) => string | undefined;
   llmProviders: LLMProviderFormEntry[];
   setLLMProviders: React.Dispatch<React.SetStateAction<LLMProviderFormEntry[]>>;
+  initialEnvironmentName: string | undefined;
+  isInitialEnvironmentLoading?: boolean;
 }
 const languageOptions = [
   { label: "Python", value: "python" },
@@ -67,6 +69,8 @@ export const InternalAgentForm = ({
   validateField,
   llmProviders,
   setLLMProviders,
+  initialEnvironmentName,
+  isInitialEnvironmentLoading = false,
 }: InternalAgentFormProps) => {
   const { orgId, projectId } = useParams<{ orgId: string; projectId: string }>();
   const privateRepoConfigs = useExternalConfigModules("private-repo-support");
@@ -583,6 +587,8 @@ export const InternalAgentForm = ({
         llmProviders={llmProviders}
         setLLMProviders={setLLMProviders}
         agentDisplayName={formData.displayName}
+        initialEnvironmentName={initialEnvironmentName}
+        isInitialEnvironmentLoading={isInitialEnvironmentLoading}
         externalEnvKeys={
           new Set((formData.env ?? []).map((e) => e.key).filter((k): k is string => !!k))
         }
