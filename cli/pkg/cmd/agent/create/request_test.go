@@ -18,8 +18,6 @@ package create
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 
 	amsvc "github.com/wso2/agent-manager/cli/pkg/clients/amsvc/gen"
@@ -296,48 +294,6 @@ func TestBuildConfig_EnvAutoInstrumentationOmittedByDefault(t *testing.T) {
 	}
 }
 
-func TestLoadModelConfig(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "model.yaml")
-	content := `- envMappings:
-    dev:
-      providerName: openai
-      configuration:
-        policies: []
-  environmentVariables:
-    - key: OPENAI_API_KEY
-      name: OpenAI API Key
-`
-	os.WriteFile(path, []byte(content), 0644)
-
-	configs, err := loadModelConfig(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if configs == nil || len(*configs) != 1 {
-		t.Fatalf("len = %v, want 1", configs)
-	}
-	c := (*configs)[0]
-	if _, ok := c.EnvMappings["dev"]; !ok {
-		t.Error("missing dev env mapping")
-	}
-}
-
-func TestLoadModelConfig_JSON(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "model.json")
-	content := `[{"envMappings":{"prod":{"providerName":"anthropic","configuration":{"policies":[]}}}}]`
-	os.WriteFile(path, []byte(content), 0644)
-
-	configs, err := loadModelConfig(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(*configs) != 1 {
-		t.Fatalf("len = %d, want 1", len(*configs))
-	}
-}
-
 func TestBuild_FullBuildpack(t *testing.T) {
 	opts := &CreateOptions{
 		Name:         "my-agent",
@@ -441,24 +397,55 @@ func TestBuild_FullDocker(t *testing.T) {
 	}
 }
 
-func TestBuild_WithModelConfig(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "mc.yaml")
-	os.WriteFile(path, []byte(`[{envMappings: {dev: {providerName: test, configuration: {}}}}]`), 0644)
-
-	mc, err := loadModelConfig(path)
-	if err != nil {
-		t.Fatalf("loadModelConfig: %v", err)
-	}
-
+func TestBuild_ModelConfig_ProviderOnly(t *testing.T) {
 	opts := validBuildpackOpts()
-	opts.modelConfig = mc
+	opts.LLMProvider = "openai"
 	req, err := Build(opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if req.ModelConfig == nil || len(*req.ModelConfig) != 1 {
-		t.Errorf("ModelConfig = %v, want 1 entry", req.ModelConfig)
+		t.Fatalf("ModelConfig = %v, want 1 entry", req.ModelConfig)
+	}
+	mc := (*req.ModelConfig)[0]
+	if mc.ProviderName != "openai" {
+		t.Errorf("ProviderName = %q, want openai", mc.ProviderName)
+	}
+	if mc.EnvironmentVariables != nil {
+		t.Errorf("EnvironmentVariables = %v, want nil (no overrides)", mc.EnvironmentVariables)
+	}
+}
+
+func TestBuild_ModelConfig_WithEnvOverrides(t *testing.T) {
+	opts := validBuildpackOpts()
+	opts.LLMProvider = "openai"
+	opts.LLMURLEnv = "MY_URL"
+	opts.LLMAPIKeyEnv = "MY_KEY"
+	req, err := Build(opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mc := (*req.ModelConfig)[0]
+	if mc.EnvironmentVariables == nil {
+		t.Fatal("EnvironmentVariables is nil, want 2 entries")
+	}
+	got := map[string]string{}
+	for _, ev := range *mc.EnvironmentVariables {
+		got[ev.Key] = ev.Name
+	}
+	if got["url"] != "MY_URL" || got["apikey"] != "MY_KEY" {
+		t.Errorf("env overrides = %v, want url=MY_URL apikey=MY_KEY", got)
+	}
+}
+
+func TestBuild_ModelConfig_OmittedWhenNoProvider(t *testing.T) {
+	opts := validBuildpackOpts()
+	req, err := Build(opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if req.ModelConfig != nil {
+		t.Errorf("ModelConfig = %v, want nil when --llm-provider unset", req.ModelConfig)
 	}
 }
 

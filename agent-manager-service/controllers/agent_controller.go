@@ -82,6 +82,9 @@ func handleCommonErrors(w http.ResponseWriter, err error, fallbackMsg string) {
 	case errors.Is(err, utils.ErrAgentNotFound):
 		utils.WriteErrorResponseWithReason(w, http.StatusNotFound,
 			"Agent not found", err.Error(), utils.ErrCodeAgentNotFound)
+	case errors.Is(err, utils.ErrLLMProviderNotFound):
+		utils.WriteErrorResponseWithReason(w, http.StatusNotFound,
+			"LLM provider not found", err.Error(), utils.ErrCodeProviderNotFound)
 	case errors.Is(err, utils.ErrBuildNotFound):
 		utils.WriteErrorResponseWithReason(w, http.StatusNotFound,
 			"Build not found", err.Error(), utils.ErrCodeBuildNotFound)

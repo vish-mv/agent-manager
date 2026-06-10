@@ -21,10 +21,10 @@ import { Alert, Form, MenuItem, Select, SelectChangeEvent, Skeleton } from "@wso
 import { PageLayout, useFormValidation } from "@agent-management-platform/views";
 import { generatePath, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { absoluteRouteMap, type AgentKindVersionResponse, OrgProjPathParams } from "@agent-management-platform/types";
-import { useCreateAgent, useGetAgentKind } from "@agent-management-platform/api-client";
+import { useCreateAgent, useGetAgentKind, useGetDeploymentPipeline } from "@agent-management-platform/api-client";
 import { createAgentSchema, type CreateAgentFormValues, type LLMProviderFormEntry } from "../form/schema";
 import { CreateButtons } from "./CreateButtons";
-import { buildCatalogAgentPayload } from "../utils/buildAgentPayload";
+import { buildCatalogAgentPayload, findLowestEnvironmentName } from "../utils/buildAgentPayload";
 import { CatalogAgentForm } from "../forms/CatalogAgentForm";
 import { LLMProviderSection } from "./LLMProviderSection";
 import { EnvironmentVariable } from "./EnvironmentVariable";
@@ -123,6 +123,12 @@ export const CatalogAgentFlow: React.FC = () => {
     }),
     [orgId, projectId]
   );
+  const { data: deploymentPipeline, isLoading: isDeploymentPipelineLoading } =
+    useGetDeploymentPipeline(params);
+  const initialEnvironmentName = useMemo(
+    () => findLowestEnvironmentName(deploymentPipeline?.promotionPaths),
+    [deploymentPipeline?.promotionPaths],
+  );
 
   const llmReservedNames = useMemo(() => {
     const agentNameUpper = formData.displayName
@@ -158,7 +164,7 @@ export const CatalogAgentFlow: React.FC = () => {
   }, [navigate, orgId, projectId]);
 
   const [lastSubmittedValidationErrors, setLastSubmittedValidationErrors] = useState<
-    typeof errors
+    Record<string, string | undefined>
   >({});
 
   const handleDeploy = useCallback(() => {
@@ -169,7 +175,21 @@ export const CatalogAgentFlow: React.FC = () => {
       setLastSubmittedValidationErrors({});
     }
 
-    const payload = buildCatalogAgentPayload(formData, params, kindId ?? "", effectiveVersion, llmProviders);
+    if (llmProviders.length > 0 && !initialEnvironmentName) {
+      setLastSubmittedValidationErrors({
+        llmProvider: "Unable to resolve the initial deployment environment for LLM provider configuration.",
+      });
+      return;
+    }
+
+    const payload = buildCatalogAgentPayload(
+      formData,
+      params,
+      kindId ?? "",
+      effectiveVersion,
+      llmProviders,
+      initialEnvironmentName,
+    );
     createAgent(payload, {
       onSuccess: () => {
         navigate(
@@ -189,7 +209,7 @@ export const CatalogAgentFlow: React.FC = () => {
       },
     });
   }, [validateForm, formData, createAgent, navigate, params, errors, llmProviders, kindId,
-    effectiveVersion]);
+    effectiveVersion, initialEnvironmentName]);
 
   const backHref = useMemo(() => {
     return generatePath(
@@ -253,6 +273,8 @@ export const CatalogAgentFlow: React.FC = () => {
           llmProviders={llmProviders}
           setLLMProviders={setLLMProviders}
           agentDisplayName={formData.displayName}
+          initialEnvironmentName={initialEnvironmentName}
+          isInitialEnvironmentLoading={isDeploymentPipelineLoading}
           externalEnvKeys={
             new Set((formData.env ?? []).map((e) => e.key).filter((k): k is string => !!k))
           }
@@ -279,7 +301,7 @@ export const CatalogAgentFlow: React.FC = () => {
 
         <CreateButtons
           lastSubmittedValidationErrors={lastSubmittedValidationErrors}
-          isPending={isPending}
+          isPending={isPending || (llmProviders.length > 0 && isDeploymentPipelineLoading)}
           onCancel={handleCancel}
           onSubmit={handleDeploy}
           isNameEmpty={!formData.name.trim()}

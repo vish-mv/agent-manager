@@ -1808,7 +1808,7 @@ type CreateAgentRequest struct {
 	// InputInterface Endpoint configurations
 	InputInterface *InputInterface `json:"inputInterface,omitempty"`
 
-	// ModelConfig Optional LLM configurations to create atomically with the agent. Name and type are auto-generated.
+	// ModelConfig Optional LLM configurations to create atomically with the agent. Applied to the component's initial (lowest) environment. Name and type are auto-generated.
 	ModelConfig *[]ModelConfigRequest `json:"modelConfig,omitempty"`
 
 	// Name Unique name of the agent
@@ -3211,11 +3211,13 @@ type MetricsResponse struct {
 
 // ModelConfigRequest defines model for ModelConfigRequest.
 type ModelConfigRequest struct {
-	// EnvMappings Map of environment names to their model configurations
-	EnvMappings map[string]EnvModelConfigRequest `json:"envMappings"`
+	Configuration *EnvProviderConfiguration `json:"configuration,omitempty"`
 
 	// EnvironmentVariables Optional custom environment variable names exposed to the agent
 	EnvironmentVariables *[]EnvironmentVariableConfig `json:"environmentVariables,omitempty"`
+
+	// ProviderName Handle of an already-configured LLM provider. Applied to the component's initial (lowest) environment.
+	ProviderName string `json:"providerName"`
 }
 
 // MonitorEvaluator defines model for MonitorEvaluator.

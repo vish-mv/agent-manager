@@ -115,7 +115,9 @@ amctl agent create payments \
 | `--env` | strings | (none) | Environment variable as `KEY=VALUE`. Repeatable. Stored as plain text. |
 | `--env-secret` | strings | (none) | Sensitive env variable as `KEY=VALUE`. Repeatable. |
 | `--env-from-secret` | strings | (none) | Env variable sourced from a managed secret: `KEY=SECRETNAME`. Repeatable. |
-| `--model-config-file` | string | (none) | Path to a model-config YAML/JSON file. |
+| `--llm-provider` | string | (none) | Handle of a configured LLM provider to attach (internal only). |
+| `--llm-url-env` | string | (none) | Env var name for the provider URL (default: auto-generated). |
+| `--llm-api-key-env` | string | (none) | Env var name for the provider API key (default: auto-generated). |
 
 ---
 

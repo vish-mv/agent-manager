@@ -19,8 +19,9 @@ var _ MappedNullable = &ModelConfigRequest{}
 
 // ModelConfigRequest struct for ModelConfigRequest
 type ModelConfigRequest struct {
-	// Map of environment names to their model configurations
-	EnvMappings map[string]EnvModelConfigRequest `json:"envMappings"`
+	// Handle of an already-configured LLM provider. Applied to the component's initial (lowest) environment.
+	ProviderName  string                    `json:"providerName"`
+	Configuration *EnvProviderConfiguration `json:"configuration,omitempty"`
 	// Optional custom environment variable names exposed to the agent
 	EnvironmentVariables []EnvironmentVariableConfig `json:"environmentVariables,omitempty"`
 }
@@ -29,9 +30,9 @@ type ModelConfigRequest struct {
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewModelConfigRequest(envMappings map[string]EnvModelConfigRequest) *ModelConfigRequest {
+func NewModelConfigRequest(providerName string) *ModelConfigRequest {
 	this := ModelConfigRequest{}
-	this.EnvMappings = envMappings
+	this.ProviderName = providerName
 	return &this
 }
 
@@ -43,28 +44,60 @@ func NewModelConfigRequestWithDefaults() *ModelConfigRequest {
 	return &this
 }
 
-// GetEnvMappings returns the EnvMappings field value
-func (o *ModelConfigRequest) GetEnvMappings() map[string]EnvModelConfigRequest {
+// GetProviderName returns the ProviderName field value
+func (o *ModelConfigRequest) GetProviderName() string {
 	if o == nil {
-		var ret map[string]EnvModelConfigRequest
+		var ret string
 		return ret
 	}
 
-	return o.EnvMappings
+	return o.ProviderName
 }
 
-// GetEnvMappingsOk returns a tuple with the EnvMappings field value
+// GetProviderNameOk returns a tuple with the ProviderName field value
 // and a boolean to check if the value has been set.
-func (o *ModelConfigRequest) GetEnvMappingsOk() (*map[string]EnvModelConfigRequest, bool) {
+func (o *ModelConfigRequest) GetProviderNameOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.EnvMappings, true
+	return &o.ProviderName, true
 }
 
-// SetEnvMappings sets field value
-func (o *ModelConfigRequest) SetEnvMappings(v map[string]EnvModelConfigRequest) {
-	o.EnvMappings = v
+// SetProviderName sets field value
+func (o *ModelConfigRequest) SetProviderName(v string) {
+	o.ProviderName = v
+}
+
+// GetConfiguration returns the Configuration field value if set, zero value otherwise.
+func (o *ModelConfigRequest) GetConfiguration() EnvProviderConfiguration {
+	if o == nil || IsNil(o.Configuration) {
+		var ret EnvProviderConfiguration
+		return ret
+	}
+	return *o.Configuration
+}
+
+// GetConfigurationOk returns a tuple with the Configuration field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ModelConfigRequest) GetConfigurationOk() (*EnvProviderConfiguration, bool) {
+	if o == nil || IsNil(o.Configuration) {
+		return nil, false
+	}
+	return o.Configuration, true
+}
+
+// HasConfiguration returns a boolean if a field has been set.
+func (o *ModelConfigRequest) HasConfiguration() bool {
+	if o != nil && !IsNil(o.Configuration) {
+		return true
+	}
+
+	return false
+}
+
+// SetConfiguration gets a reference to the given EnvProviderConfiguration and assigns it to the Configuration field.
+func (o *ModelConfigRequest) SetConfiguration(v EnvProviderConfiguration) {
+	o.Configuration = &v
 }
 
 // GetEnvironmentVariables returns the EnvironmentVariables field value if set, zero value otherwise.
@@ -109,7 +142,10 @@ func (o ModelConfigRequest) MarshalJSON() ([]byte, error) {
 
 func (o ModelConfigRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["envMappings"] = o.EnvMappings
+	toSerialize["providerName"] = o.ProviderName
+	if !IsNil(o.Configuration) {
+		toSerialize["configuration"] = o.Configuration
+	}
 	if !IsNil(o.EnvironmentVariables) {
 		toSerialize["environmentVariables"] = o.EnvironmentVariables
 	}

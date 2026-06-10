@@ -987,6 +987,18 @@ func (s *agentManagerService) createComponentAgent(ctx context.Context, orgName,
 		return fmt.Errorf("no environment found in deployment pipeline")
 	}
 
+	// Preflight: validate referenced LLM providers before creating any secrets or
+	// the component, so a bad provider fails fast with no resources to roll back.
+	if len(req.ModelConfig) > 0 {
+		handles := make([]string, 0, len(req.ModelConfig))
+		for _, mc := range req.ModelConfig {
+			handles = append(handles, mc.ProviderName)
+		}
+		if err := s.agentConfigurationService.ValidateProvidersInCatalog(ctx, orgName, handles); err != nil {
+			return err
+		}
+	}
+
 	secretLocation := secretmanagersvc.SecretLocation{
 		OrgName:         orgName,
 		ProjectName:     projectName,
@@ -1084,7 +1096,7 @@ func (s *agentManagerService) createComponentAgent(ctx context.Context, orgName,
 
 	// Create LLM configurations (applies to both internal and external agents)
 	if len(req.ModelConfig) > 0 {
-		if err := s.createAgentLLMConfigs(ctx, orgName, projectName, req); err != nil {
+		if err := s.createAgentLLMConfigs(ctx, orgName, projectName, firstEnv, req); err != nil {
 			s.logger.Error("Failed to create LLM configurations for agent", "agentName", req.Name, "error", err)
 			rollbackAgentCreate("LLM config failure")
 			return err
@@ -1192,17 +1204,26 @@ func (s *agentManagerService) triggerInitialBuild(ctx context.Context, orgName, 
 }
 
 func (s *agentManagerService) createAgentLLMConfigs(
-	ctx context.Context, orgName, projectName string, req *spec.CreateAgentRequest,
+	ctx context.Context, orgName, projectName, firstEnv string, req *spec.CreateAgentRequest,
 ) error {
 	for i, mc := range req.ModelConfig {
 		configName := fmt.Sprintf("%s-llm-config", req.Name)
 		if len(req.ModelConfig) > 1 {
 			configName = fmt.Sprintf("%s-llm-config-%d", req.Name, i+1)
 		}
+		cfg := models.EnvProviderConfiguration{}
+		if mc.Configuration != nil {
+			cfg = convertConfiguration(*mc.Configuration)
+		}
 		createReq := models.CreateAgentModelConfigRequest{
-			Name:                 configName,
-			Type:                 "llm",
-			EnvMappings:          convertEnvMappings(mc.EnvMappings),
+			Name: configName,
+			Type: "llm",
+			EnvMappings: map[string]models.EnvModelConfigRequest{
+				firstEnv: {
+					ProviderName:  mc.ProviderName,
+					Configuration: cfg,
+				},
+			},
 			EnvironmentVariables: convertEnvVars(mc.EnvironmentVariables),
 		}
 		if _, err := s.agentConfigurationService.Create(ctx, orgName, projectName, req.Name, createReq, "system"); err != nil {
@@ -1212,31 +1233,26 @@ func (s *agentManagerService) createAgentLLMConfigs(
 	return nil
 }
 
-func convertEnvMappings(specMappings map[string]spec.EnvModelConfigRequest) map[string]models.EnvModelConfigRequest {
-	result := make(map[string]models.EnvModelConfigRequest, len(specMappings))
-	for env, m := range specMappings {
-		policies := make([]models.LLMPolicy, 0, len(m.Configuration.Policies))
-		for _, p := range m.Configuration.Policies {
-			paths := make([]models.LLMPolicyPath, 0, len(p.Paths))
-			for _, pp := range p.Paths {
-				paths = append(paths, models.LLMPolicyPath{
-					Path:    pp.Path,
-					Methods: pp.Methods,
-					Params:  pp.Params,
-				})
-			}
-			policies = append(policies, models.LLMPolicy{
-				Name:    p.Name,
-				Version: p.Version,
-				Paths:   paths,
+// convertConfiguration maps a generated provider configuration to the model type,
+// preserving guardrail policies. Replaces the per-env conversion that convertEnvMappings did.
+func convertConfiguration(cfg spec.EnvProviderConfiguration) models.EnvProviderConfiguration {
+	policies := make([]models.LLMPolicy, 0, len(cfg.Policies))
+	for _, p := range cfg.Policies {
+		paths := make([]models.LLMPolicyPath, 0, len(p.Paths))
+		for _, pp := range p.Paths {
+			paths = append(paths, models.LLMPolicyPath{
+				Path:    pp.Path,
+				Methods: pp.Methods,
+				Params:  pp.Params,
 			})
 		}
-		result[env] = models.EnvModelConfigRequest{
-			ProviderName:  m.ProviderName,
-			Configuration: models.EnvProviderConfiguration{Policies: policies},
-		}
+		policies = append(policies, models.LLMPolicy{
+			Name:    p.Name,
+			Version: p.Version,
+			Paths:   paths,
+		})
 	}
-	return result
+	return models.EnvProviderConfiguration{Policies: policies}
 }
 
 func convertEnvVars(specVars []spec.EnvironmentVariableConfig) []models.EnvironmentVariableConfig {

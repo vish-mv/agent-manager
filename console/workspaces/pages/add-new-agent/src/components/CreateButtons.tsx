@@ -20,7 +20,7 @@ import { Alert, Box, Button, Collapse } from "@wso2/oxygen-ui";
 import { Rocket as RocketOutlined, Link } from "@wso2/oxygen-ui-icons-react";
 
 interface SummaryPanelProps {
-    lastSubmittedValidationErrors: Record<string, string>;
+    lastSubmittedValidationErrors: Record<string, string | undefined>;
     isPending: boolean;
     onCancel: () => void;
     onSubmit: () => void;
@@ -34,7 +34,8 @@ export const CreateButtons = (
 ) => {
     const isConnectMode = mode === 'connect';
 
-    const errorsList = Object.values(lastSubmittedValidationErrors);
+    const errorsList = Object.values(lastSubmittedValidationErrors)
+        .filter((error): error is string => !!error);
     const hasErrors = errorsList.length > 0;
 
     return (
@@ -66,4 +67,3 @@ export const CreateButtons = (
         </Box>
     );
 };
-
