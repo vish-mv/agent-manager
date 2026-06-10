@@ -60,11 +60,11 @@ body:
       label: MCP, CLI, and Skill Components
       description: Does this feature need MCP, CLI, or skill components? Provide an argument for and against each relevant component.
       value: |
-        | Component | Needed? | Argument for | Argument against |
-        |-----------|---------|--------------|------------------|
-        | MCP       | Yes/No  |              |                  |
-        | CLI       | Yes/No  |              |                  |
-        | Skill     | Yes/No  |              |                  |
+        | Component | Required (yes/no) | Reason |
+        |-----------|-------------------|--------|
+        | MCP       |                   |        |
+        | CLI       |                   |        |
+        | Skill     |                   |        |
 
         **Decision**: Summarize which components are in scope and why.
     validations:
