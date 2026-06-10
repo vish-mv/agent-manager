@@ -61,7 +61,7 @@ const (
 	GatewayRead        Permission = "gateway:read"
 	GatewayUpdate      Permission = "gateway:update"
 	GatewayDelete      Permission = "gateway:delete"
-	GatewayTokenManage Permission = "gateway:token:manage"
+	GatewayTokenManage Permission = "gateway:token-manage"
 )
 
 // Infrastructure (read-only) permissions
@@ -94,7 +94,7 @@ const (
 	LLMProviderConfigureGuardrail Permission = "llm-provider:configure-guardrail"
 	LLMProviderConnect            Permission = "llm-provider:connect"
 	LLMProviderDeploy             Permission = "llm-provider:deploy"
-	LLMProviderAPIKeyManage       Permission = "llm-provider:api-key:manage"
+	LLMProviderAPIKeyManage       Permission = "llm-provider:api-key-manage"
 )
 
 // MCP server permissions
@@ -114,7 +114,7 @@ const (
 	LLMProxyUpdate       Permission = "llm-proxy:update"
 	LLMProxyDelete       Permission = "llm-proxy:delete"
 	LLMProxyDeploy       Permission = "llm-proxy:deploy"
-	LLMProxyAPIKeyManage Permission = "llm-proxy:api-key:manage"
+	LLMProxyAPIKeyManage Permission = "llm-proxy:api-key-manage"
 )
 
 // Evaluator permissions
@@ -132,13 +132,13 @@ const (
 	AgentUpdate              Permission = "agent:update"
 	AgentDelete              Permission = "agent:delete"
 	AgentBuild               Permission = "agent:build"
-	AgentDeployNonProduction Permission = "agent:deploy:non-production"
-	AgentDeployProduction    Permission = "agent:deploy:production"
+	AgentDeployNonProduction Permission = "agent:deploy-non-production"
+	AgentDeployProduction    Permission = "agent:deploy-production"
 	AgentPromote             Permission = "agent:promote"
 	AgentRollback            Permission = "agent:rollback"
 	AgentSuspend             Permission = "agent:suspend"
-	AgentTokenManage         Permission = "agent:token:manage"
-	AgentAPIKeyManage        Permission = "agent:api-key:manage"
+	AgentTokenManage         Permission = "agent:token-manage"
+	AgentAPIKeyManage        Permission = "agent:api-key-manage"
 )
 
 // Agent Kind permissions
@@ -156,8 +156,8 @@ const (
 	MonitorUpdate       Permission = "monitor:update"
 	MonitorDelete       Permission = "monitor:delete"
 	MonitorExecute      Permission = "monitor:execute"
-	MonitorScoreRead    Permission = "monitor:score:read"
-	MonitorScorePublish Permission = "monitor:score:publish"
+	MonitorScoreRead    Permission = "monitor:score-read"
+	MonitorScorePublish Permission = "monitor:score-publish"
 )
 
 // Observability permissions

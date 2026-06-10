@@ -55,7 +55,7 @@ _TOKEN_REFRESH_SKEW_S = 30
 _TOKEN_SCOPES = (
     "project:create project:read project:delete "
     "agent:create agent:read agent:delete agent:build "
-    "agent:deploy:non-production agent:api-key:manage"
+    "agent:deploy-non-production agent:api-key-manage"
 )
 
 # The deployed agent's source is cloned from this repo ref by the in-cluster

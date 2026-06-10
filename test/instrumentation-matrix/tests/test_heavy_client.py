@@ -62,7 +62,7 @@ def test_access_token_requests_rbac_scopes():
     body = _u.parse_qs([r for r in responses.calls if r.request.url.startswith(TOKEN_URL)][0].request.body)
     assert body["grant_type"] == ["client_credentials"]
     requested = body["scope"][0].split()
-    for required in ("project:create", "agent:create", "agent:api-key:manage", "project:delete"):
+    for required in ("project:create", "agent:create", "agent:api-key-manage", "project:delete"):
         assert required in requested
 
 

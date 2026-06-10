@@ -213,7 +213,7 @@ spec:
 
               TOKEN_RESPONSE=$(http_post "${IDP_TOKEN_URL}" \
                 "application/x-www-form-urlencoded" \
-                "grant_type=client_credentials&scope=gateway:create%20gateway:read%20gateway:update%20gateway:delete%20gateway:token:manage%20data-plane:read%20deployment-pipeline:read%20environment:read%20project:read%20agent:read%20agent:build%20llm-provider:read%20mcp-server:read%20evaluator:read%20monitor:read%20monitor:score:read%20git-secret:read%20catalog:read%20repository:read%20observability:project-dashboard" \
+                "grant_type=client_credentials&scope=gateway:create%20gateway:read%20gateway:update%20gateway:delete%20gateway:token-manage%20data-plane:read%20deployment-pipeline:read%20environment:read%20project:read%20agent:read%20agent:build%20llm-provider:read%20mcp-server:read%20evaluator:read%20monitor:read%20monitor:score-read%20git-secret:read%20catalog:read%20repository:read%20observability:project-dashboard" \
                 "Basic ${BASIC_AUTH}")
 
               ACCESS_TOKEN=$(echo "${TOKEN_RESPONSE}" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
