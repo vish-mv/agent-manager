@@ -139,11 +139,13 @@ export const RolesPage: React.FC = () => {
                           <Edit size={16} />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete role">
-                        <IconButton size="small" onClick={() => handleDelete(role)}>
-                          <Trash size={16} />
-                        </IconButton>
-                      </Tooltip>
+                      {!role.isReadOnly && (
+                        <Tooltip title="Delete role">
+                          <IconButton size="small" onClick={() => handleDelete(role)}>
+                            <Trash size={16} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </Stack>
                   </ListingTable.Cell>
                 </ListingTable.Row>

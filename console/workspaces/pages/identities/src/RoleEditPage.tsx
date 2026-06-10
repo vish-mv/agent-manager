@@ -97,6 +97,7 @@ export const RoleEditPage: React.FC = () => {
     orgName: orgId,
     roleId: roleId ?? "",
   });
+  const isPermissionsReadOnly = roleData?.isReadOnly ?? false;
   const { data: assignmentsData, isLoading: isLoadingAssignments } = useGetRoleAssignments({
     orgName: orgId,
     roleId: roleId ?? "",
@@ -282,8 +283,8 @@ export const RoleEditPage: React.FC = () => {
         await removeAssignees({ params, body: { groupIds: removeGroupIds } });
       }
 
-      // Permissions — diff selected vs initial
-      if (hasEditedPermissions.current && resourceServerId) {
+      // Permissions — diff selected vs initial (skip for predefined roles)
+      if (hasEditedPermissions.current && resourceServerId && !isPermissionsReadOnly) {
         const currentSet = new Set(initialPermissions);
         const nextSet = new Set(selectedPermissions.map((p) => p.name));
         const toAdd = [...nextSet].filter((n) => !currentSet.has(n));
@@ -352,93 +353,99 @@ export const RoleEditPage: React.FC = () => {
               Permissions
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              Search and select permissions to assign to this role.
+              {isPermissionsReadOnly
+                ? "Permissions for predefined roles cannot be modified."
+                : "Search and select permissions to assign to this role."}
             </Typography>
             <Divider sx={{ mb: 2 }} />
 
-            <Autocomplete
-              multiple
-              disableCloseOnSelect
-              options={catalogPermissions}
-              value={selectedPermissions}
-              onChange={handlePermissionsChange}
-              getOptionLabel={(option) => permLabel(option as ThunderPermission)}
-              groupBy={(option) => permGroup(option as ThunderPermission)}
-              filterOptions={filterPermissions}
-              isOptionEqualToValue={(option, value) =>
-                (option as ThunderPermission).name === (value as ThunderPermission).name
-              }
-              renderTags={() => null}
-              renderGroup={(params) => {
-                const groupPerms = catalogPermissions.filter(
-                  (p) => permGroup(p) === params.group,
-                );
-                const allSelected = groupPerms.every((p) => selectedNames.has(p.name));
-                const someSelected = groupPerms.some((p) => selectedNames.has(p.name));
-                const handleGroupToggle = (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  hasEditedPermissions.current = true;
-                  if (allSelected) {
-                    setSelectedPermissions((prev) =>
-                      prev.filter((p) => permGroup(p) !== params.group),
-                    );
-                  } else {
-                    const toAdd = groupPerms.filter((p) => !selectedNames.has(p.name));
-                    setSelectedPermissions((prev) => [...prev, ...toAdd]);
-                  }
-                };
-                return (
-                  <li key={params.key}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        px: 1,
-                        py: 0.25,
-                        cursor: "pointer",
-                        userSelect: "none",
-                        "&:hover": { bgcolor: "action.hover" },
-                      }}
-                      onClick={handleGroupToggle}
-                    >
-                      <Checkbox
-                        checked={allSelected}
-                        indeterminate={someSelected && !allSelected}
-                        size="small"
-                        sx={{ mr: 0.5, p: 0.5 }}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={
-                          handleGroupToggle as unknown as React.ChangeEventHandler<HTMLInputElement>
-                        }
-                      />
-                      <Typography
-                        variant="caption"
-                        fontWeight={700}
-                        sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
+            {!isPermissionsReadOnly && (
+              <Autocomplete
+                multiple
+                disableCloseOnSelect
+                options={catalogPermissions}
+                value={selectedPermissions}
+                onChange={handlePermissionsChange}
+                getOptionLabel={(option) => permLabel(option as ThunderPermission)}
+                groupBy={(option) => permGroup(option as ThunderPermission)}
+                filterOptions={filterPermissions}
+                isOptionEqualToValue={(option, value) =>
+                  (option as ThunderPermission).name === (value as ThunderPermission).name
+                }
+                renderTags={() => null}
+                renderGroup={(params) => {
+                  const groupPerms = catalogPermissions.filter(
+                    (p) => permGroup(p) === params.group,
+                  );
+                  const allSelected = groupPerms.every((p) => selectedNames.has(p.name));
+                  const someSelected = groupPerms.some((p) => selectedNames.has(p.name));
+                  const handleGroupToggle = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    hasEditedPermissions.current = true;
+                    if (allSelected) {
+                      setSelectedPermissions((prev) =>
+                        prev.filter((p) => permGroup(p) !== params.group),
+                      );
+                    } else {
+                      const toAdd = groupPerms.filter((p) => !selectedNames.has(p.name));
+                      setSelectedPermissions((prev) => [...prev, ...toAdd]);
+                    }
+                  };
+                  return (
+                    <li key={params.key}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          px: 1,
+                          py: 0.25,
+                          cursor: "pointer",
+                          userSelect: "none",
+                          "&:hover": { bgcolor: "action.hover" },
+                        }}
+                        onClick={handleGroupToggle}
                       >
-                        {params.group}
-                      </Typography>
-                    </Box>
-                    <ul style={{ padding: 0 }}>{params.children}</ul>
+                        <Checkbox
+                          checked={allSelected}
+                          indeterminate={someSelected && !allSelected}
+                          size="small"
+                          sx={{ mr: 0.5, p: 0.5 }}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={
+                            handleGroupToggle as unknown as React.ChangeEventHandler<
+                              HTMLInputElement
+                            >
+                          }
+                        />
+                        <Typography
+                          variant="caption"
+                          fontWeight={700}
+                          sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
+                        >
+                          {params.group}
+                        </Typography>
+                      </Box>
+                      <ul style={{ padding: 0 }}>{params.children}</ul>
+                    </li>
+                  );
+                }}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}>
+                    <Checkbox checked={selected} size="small" sx={{ mr: 1 }} />
+                    {permLabel(option as ThunderPermission)}
                   </li>
-                );
-              }}
-              renderOption={(props, option, { selected }) => (
-                <li {...props}>
-                  <Checkbox checked={selected} size="small" sx={{ mr: 1 }} />
-                  {permLabel(option as ThunderPermission)}
-                </li>
-              )}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Add permissions"
-                  placeholder="Search by resource or action..."
-                />
-              )}
-              noOptionsText="No permissions available"
-              sx={{ mb: 3 }}
-            />
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Add permissions"
+                    placeholder="Search by resource or action..."
+                  />
+                )}
+                noOptionsText="No permissions available"
+                sx={{ mb: 3 }}
+              />
+            )}
 
             {selectedPermissions.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -468,7 +475,11 @@ export const RoleEditPage: React.FC = () => {
                               key={p.name}
                               label={permLabel(p)}
                               size="small"
-                              onDelete={() => handleRemovePermission(p.name)}
+                              onDelete={
+                                !isPermissionsReadOnly
+                                  ? () => handleRemovePermission(p.name)
+                                  : undefined
+                              }
                             />
                           ))}
                       </Stack>
@@ -601,14 +612,16 @@ export const RoleEditPage: React.FC = () => {
           </Box>
         )}
 
-        <Stack direction="row" spacing={1} justifyContent="flex-end">
-          <Button variant="outlined" onClick={() => navigate(rolesPath)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save Changes"}
-          </Button>
-        </Stack>
+        {!(isPermissionsReadOnly && activeTab === "permissions") && (
+          <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Button variant="outlined" onClick={() => navigate(rolesPath)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </Stack>
+        )}
       </Stack>
     </PageLayout>
   );

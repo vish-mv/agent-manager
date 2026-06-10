@@ -118,6 +118,7 @@ type ThunderRole struct {
 	Name        string                  `json:"name"`
 	Description string                  `json:"description,omitempty"`
 	Permissions []RolePermissionRequest `json:"permissions,omitempty"`
+	IsReadOnly  bool                    `json:"isReadOnly"`
 	CreatedAt   string                  `json:"createdAt,omitempty"`
 	UpdatedAt   string                  `json:"updatedAt,omitempty"`
 }

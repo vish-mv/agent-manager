@@ -25,6 +25,7 @@ import (
 
 	"github.com/wso2/agent-manager/agent-manager-service/clients/thundersvc"
 	"github.com/wso2/agent-manager/agent-manager-service/config"
+	"github.com/wso2/agent-manager/agent-manager-service/constants"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware"
 	"github.com/wso2/agent-manager/agent-manager-service/middleware/logger"
 	"github.com/wso2/agent-manager/agent-manager-service/utils"
@@ -353,6 +354,9 @@ func (c *identityController) GetUserRoles(w http.ResponseWriter, r *http.Request
 		log.Error("GetUserRoles failed", "userID", userID, "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to get user roles")
 		return
+	}
+	for i := range roles {
+		roles[i].IsReadOnly = constants.IsPredefinedRole(roles[i].Name)
 	}
 	utils.WriteSuccessResponse(w, http.StatusOK, map[string]any{"roles": roles})
 }
@@ -739,6 +743,9 @@ func (c *identityController) GetGroupRoles(w http.ResponseWriter, r *http.Reques
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to get group roles")
 		return
 	}
+	for i := range roles {
+		roles[i].IsReadOnly = constants.IsPredefinedRole(roles[i].Name)
+	}
 	utils.WriteSuccessResponse(w, http.StatusOK, map[string]any{"roles": roles})
 }
 
@@ -769,9 +776,11 @@ func (c *identityController) ListRoles(w http.ResponseWriter, r *http.Request) {
 
 	// Filter roles to only include those belonging to the caller's OU
 	// Thunder's ListRoles endpoint returns all roles, not OU-scoped
+	// Also exclude the "Administrator" role from public visibility
 	filteredRoles := make([]thundersvc.ThunderRole, 0, len(roles))
 	for _, role := range roles {
-		if role.OuID == resolvedOrg.OUID {
+		if role.OuID == resolvedOrg.OUID && role.Name != "Administrator" {
+			role.IsReadOnly = constants.IsPredefinedRole(role.Name)
 			filteredRoles = append(filteredRoles, role)
 		}
 	}
@@ -805,6 +814,7 @@ func (c *identityController) GetRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	role.IsReadOnly = constants.IsPredefinedRole(role.Name)
 	utils.WriteSuccessResponse(w, http.StatusOK, role)
 }
 
@@ -835,6 +845,7 @@ func (c *identityController) CreateRole(w http.ResponseWriter, r *http.Request) 
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to create role")
 		return
 	}
+	role.IsReadOnly = constants.IsPredefinedRole(role.Name)
 	utils.WriteSuccessResponse(w, http.StatusCreated, role)
 }
 
@@ -864,6 +875,10 @@ func (c *identityController) UpdateRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !validatePredefinedRole(w, role.Name) {
+		return
+	}
+
 	var req thundersvc.UpdateRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "Invalid request body")
@@ -880,6 +895,7 @@ func (c *identityController) UpdateRole(w http.ResponseWriter, r *http.Request) 
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "Failed to update role")
 		return
 	}
+	updatedRole.IsReadOnly = constants.IsPredefinedRole(updatedRole.Name)
 	utils.WriteSuccessResponse(w, http.StatusOK, updatedRole)
 }
 
@@ -906,6 +922,10 @@ func (c *identityController) DeleteRole(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if !validateRoleOwnership(w, ctx, role, resolvedOrg.OUID) {
+		return
+	}
+
+	if !validatePredefinedRole(w, role.Name) {
 		return
 	}
 
@@ -1176,6 +1196,18 @@ func validateGroupOwnership(w http.ResponseWriter, ctx context.Context, group *t
 func validateRoleOwnership(w http.ResponseWriter, ctx context.Context, role *thundersvc.ThunderRole, callerOuID string) bool {
 	if role.OuID != "" && role.OuID != callerOuID {
 		utils.WriteErrorResponse(w, http.StatusForbidden, "Role does not belong to your organization")
+		return false
+	}
+	return true
+}
+
+func isPredefinedRole(roleName string) bool {
+	return constants.IsPredefinedRole(roleName)
+}
+
+func validatePredefinedRole(w http.ResponseWriter, roleName string) bool {
+	if isPredefinedRole(roleName) {
+		utils.WriteErrorResponse(w, http.StatusBadRequest, "Predefined roles cannot be edited or deleted")
 		return false
 	}
 	return true

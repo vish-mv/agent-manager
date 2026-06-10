@@ -91,6 +91,7 @@ export interface ThunderRole {
   name: string;
   description?: string;
   permissions?: RolePermissionRequest[];
+  isReadOnly?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
