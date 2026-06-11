@@ -532,8 +532,8 @@ thunder:
       allowSelfRegistration: true
     # Default admin user configuration
     defaultUsers:
-      - username: "amp-admin@wso2.com"
-        password: "Amp-Admin@wso2.com"
+      - username: "amp-admin"
+        password: "amp-admin"
         givenName: "Admin"
         familyName: "User"
         groups: ["platformEngineer"]

@@ -1652,7 +1652,7 @@ data:
       fi
     }
 
-    assign_user_to_role "amp-admin@wso2.com" "$ADMIN_ID" "admin"
+    assign_user_to_role "amp-admin" "$ADMIN_ID" "admin"
 
     # ===========================================================================
     # Assign ampApiClient app to admin role so it gets all scopes in M2M tokens
