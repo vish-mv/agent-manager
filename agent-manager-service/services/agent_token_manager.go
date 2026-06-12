@@ -65,6 +65,7 @@ type AgentTokenClaims struct {
 	EnvironmentUid string `json:"environment_uid"`
 	ProjectUid     string `json:"project_uid,omitempty"`
 	OrgId          string `json:"org_id"`
+	Namespace      string `json:"namespace"`
 }
 
 // KeyPair holds a private/public RSA key pair with its metadata
@@ -302,6 +303,7 @@ func (s *agentTokenManagerService) GenerateToken(ctx context.Context, req Genera
 		EnvironmentUid: environment.UUID,
 		ProjectUid:     project.UUID,
 		OrgId:          req.OrgId,
+		Namespace:      req.OrgName,
 	}
 
 	// Get the active signing key
