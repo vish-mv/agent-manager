@@ -33,11 +33,30 @@ echo ""
 install_control_plane() {
     echo "📦 Installing/Upgrading OpenChoreo Control Plane..."
     echo "   This may take up to 10 minutes..."
-    helm upgrade --install openchoreo-control-plane oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
-        --version ${OPENCHOREO_VERSION} \
+
+    local install_output
+    if ! install_output=$(helm upgrade --install openchoreo-control-plane oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
+        --version "${OPENCHOREO_VERSION}" \
         --namespace openchoreo-control-plane \
         --create-namespace \
-        --values "${SCRIPT_DIR}/../single-cluster/values-cp.yaml"
+        --values "${SCRIPT_DIR}/../single-cluster/values-cp.yaml" 2>&1); then
+
+        echo "$install_output"
+
+        if echo "$install_output" | grep -q "no endpoints available for service \"controller-manager-webhook-service\""; then
+            echo "⚠️  Control Plane webhook was not ready. Waiting for deployments and retrying once..."
+            kubectl wait -n openchoreo-control-plane --for=condition=available --timeout=300s deployment --all || true
+
+            helm upgrade --install openchoreo-control-plane oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
+                --version "${OPENCHOREO_VERSION}" \
+                --namespace openchoreo-control-plane \
+                --create-namespace \
+                --values "${SCRIPT_DIR}/../single-cluster/values-cp.yaml"
+        else
+            echo "❌ OpenChoreo Control Plane install failed"
+            return 1
+        fi
+    fi
 
     echo "⏳ Waiting for Control Plane deployments to be ready (timeout: 5 minutes)..."
     kubectl wait -n openchoreo-control-plane --for=condition=available --timeout=300s deployment --all
@@ -150,8 +169,9 @@ install_observability_plane() {
       oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
       --create-namespace \
       --namespace openchoreo-observability-plane \
-      --version 0.3.8 \
-      --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials"
+      --version "${OBSERVABILITY_LOGS_OPENSEARCH_VERSION}" \
+      --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
+      --set adapter.openSearchSecretName="opensearch-admin-credentials"
     echo "✅ OpenSearch based logs module installed"
 
     # Enable logs collection in the configured logs module
@@ -160,7 +180,7 @@ install_observability_plane() {
       oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
       --create-namespace \
       --namespace openchoreo-observability-plane \
-      --version 0.3.8 \
+      --version "${OBSERVABILITY_LOGS_OPENSEARCH_VERSION}" \
       --reuse-values \
       --set fluent-bit.enabled=true
     echo "✅ OpenSearch Log collection enabled"
@@ -170,7 +190,7 @@ install_observability_plane() {
     oci://ghcr.io/openchoreo/helm-charts/observability-tracing-opensearch \
         --create-namespace \
         --namespace openchoreo-observability-plane \
-        --version 0.3.7 \
+        --version "${OBSERVABILITY_TRACING_OPENSEARCH_VERSION}" \
         --set openSearch.enabled=false \
         --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
         --set opentelemetry-collector.configMap.existingName="amp-opentelemetry-collector-config"
@@ -181,8 +201,8 @@ install_observability_plane() {
       oci://ghcr.io/openchoreo/helm-charts/observability-metrics-prometheus \
       --create-namespace \
       --namespace openchoreo-observability-plane \
-      --version 0.2.4 \
-      --set adapter.image.tag=0.2.4
+      --version "${OBSERVABILITY_METRICS_PROMETHEUS_VERSION}" \
+      --set adapter.image.tag=""
     echo "✅ Prometheus based metrics module installed"
 
     echo "⏳ Waiting for Observability Plane pods to be ready..."
