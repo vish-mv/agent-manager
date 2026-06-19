@@ -27,7 +27,7 @@ type DeploymentResponse struct {
 	Environment                string                      `json:"environment"`
 	EnvironmentDisplayName     string                      `json:"environmentDisplayName"`
 	PromotionTargetEnvironment *PromotionTargetEnvironment `json:"promotionTargetEnvironment,omitempty"`
-	LastDeployedAt             time.Time                   `json:"lastDeployedAt"`
+	LastDeployedAt             *time.Time                  `json:"lastDeployedAt,omitempty"`
 	Endpoints                  []Endpoint                  `json:"endpoints"`
 }
 
