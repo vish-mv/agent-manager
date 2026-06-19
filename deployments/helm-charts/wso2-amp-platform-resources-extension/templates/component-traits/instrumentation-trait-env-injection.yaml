@@ -51,19 +51,19 @@ spec:
   # does NOT inject these to avoid duplicates.
   patches:
     - target:
-        kind: Deployment
-        group: apps
-        version: v1
+        kind: SandboxTemplate
+        group: extensions.agents.x-k8s.io
+        version: v1alpha1
       operations:
         - op: add
-          path: /spec/template/spec/containers/0/env/-
+          path: /spec/podTemplate/spec/containers/0/env/-
           value:
             name: AMP_OTEL_ENDPOINT
             # Derived from the apiGatewayName helper convention ("api-platform-<org>-<env>")
             # + the gateway runtime in-cluster Service.
             value: "http://api-platform-${metadata.componentNamespace}-${metadata.environmentName}-gateway-gateway-runtime.openchoreo-data-plane:22893/otel"
         - op: add
-          path: /spec/template/spec/containers/0/env/-
+          path: /spec/podTemplate/spec/containers/0/env/-
           value:
             name: AMP_AGENT_API_KEY
             valueFrom:
