@@ -45,7 +45,7 @@ const (
 type ComponentType string
 
 const (
-	ComponentTypeInternalAgentAPI ComponentType = "deployment/agent-api"
+	ComponentTypeInternalAgentAPI ComponentType = "proxy/agent-api"
 	ComponentTypeExternalAgentAPI ComponentType = "proxy/external-agent-api"
 )
 

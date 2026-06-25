@@ -50,15 +50,15 @@ spec:
   # traits are attached (includeWhen is not enforced on patches).
   patches:
     - target:
-        kind: Deployment
-        group: apps
-        version: v1
+        kind: SandboxTemplate
+        group: extensions.agents.x-k8s.io
+        version: v1alpha1
         where: |
           ${has(environmentConfigs.instrumentationEnabled) ? environmentConfigs.instrumentationEnabled : parameters.instrumentationEnabled}
       operations:
-        # 1. Add init container to spec.template.spec.initContainers
+      # 1. Add init container to spec.podTemplate.spec.initContainers
         - op: add
-          path: /spec/template/spec/initContainers/-
+          path: /spec/podTemplate/spec/initContainers/-
           value:
             name: setup-instrumentation
             image: ${parameters.instrumentationImage}
@@ -69,14 +69,14 @@ spec:
 
         # 2. Add emptyDir volume for sharing SDK files
         - op: add
-          path: /spec/template/spec/volumes/-
+          path: /spec/podTemplate/spec/volumes/-
           value:
             name: ${parameters.sdkVolumeName}
             emptyDir: {}
 
         # 3. Add volume mount to main container
         - op: add
-          path: /spec/template/spec/containers/0/volumeMounts/-
+          path: /spec/podTemplate/spec/containers/0/volumeMounts/-
           value:
             name: ${parameters.sdkVolumeName}
             mountPath: ${parameters.sdkMountPath}
@@ -84,12 +84,12 @@ spec:
 
         # 4. Set OTEL-specific environment variables
         - op: add
-          path: /spec/template/spec/containers/0/env/-
+          path: /spec/podTemplate/spec/containers/0/env/-
           value:
             name: AMP_TRACE_CONTENT
             value: "${has(environmentConfigs.isTraceContentEnabled) ? environmentConfigs.isTraceContentEnabled : parameters.isTraceContentEnabled}"
         - op: add
-          path: /spec/template/spec/containers/0/env/-
+          path: /spec/podTemplate/spec/containers/0/env/-
           value:
             name: PYTHONPATH
             value: "${parameters.sdkMountPath}"

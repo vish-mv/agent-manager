@@ -7,7 +7,7 @@ metadata:
     openchoreo.dev/display-name: Platform Hosted Agent API
     openchoreo.dev/description: Component type for deploying agent APIs in the AI Agent Management Platform.
 spec:
-  workloadType: deployment
+  workloadType: proxy
 
   allowedWorkflows:
     - kind: ClusterWorkflow
@@ -26,15 +26,6 @@ spec:
       name: ballerina-otel-instrumentation-trait
     - kind: Trait
       name: api-configuration
-  traits:
-    - name: horizontal-pod-autoscaler
-      kind: ClusterTrait
-      instanceName: ${meta.componentName}-hpa
-      environmentConfigs:
-        enabled: ${environmentConfigs.autoscaling.enabled}
-        minReplicas: ${environmentConfigs.autoscaling.minReplicas}
-        maxReplicas: ${environmentConfigs.autoscaling.maxReplicas}
-        targetCPUUtilizationPercentage: ${environmentConfigs.autoscaling.cpuUtilizationPercentage}
 
   validations:
     - rule: "${size(workload.endpoints) > 0}"
@@ -103,19 +94,16 @@ spec:
           $ref: "#/$defs/AutoscalingConfig"
 
   resources:
-    - id: deployment
+    - id: sandbox-template
       template:
-        apiVersion: apps/v1
-        kind: Deployment
+        apiVersion: extensions.agents.x-k8s.io/v1alpha1
+        kind: SandboxTemplate
         metadata:
-          name: ${metadata.name}
+          name: '${environmentConfigs.restartedAt != "" ? oc_generate_name(metadata.componentName, environmentConfigs.restartedAt) : metadata.componentName}'
           namespace: ${metadata.namespace}
           labels: ${metadata.labels}
         spec:
-          replicas: ${environmentConfigs.replicas}
-          selector:
-            matchLabels: ${metadata.podSelectors}
-          template:
+          podTemplate:
             metadata:
               labels: ${metadata.podSelectors}
               annotations:
@@ -165,6 +153,75 @@ spec:
                   {"name": "workspace", "emptyDir": {"sizeLimit": "500Mi"}},
                   {"name": "cache", "emptyDir": {"sizeLimit": "200Mi"}}
                 ]}
+        networkPolicy:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+            - to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: openchoreo-data-plane
+            - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 80
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+                      - 169.254.0.0/16
+                - ipBlock:
+                    cidr: ::/0
+                    except:
+                      - fc00::/7
+        networkPolicyManagement: Managed
+
+  - id: sandbox-warmpool
+    template:
+      apiVersion: extensions.agents.x-k8s.io/v1alpha1
+      kind: SandboxWarmPool
+      metadata:
+        name: ${metadata.componentName}
+        namespace: ${metadata.namespace}
+        labels: ${metadata.labels}
+      spec:
+        sandboxTemplateRef:
+          name: '${environmentConfigs.restartedAt != "" ? oc_generate_name(metadata.componentName, environmentConfigs.restartedAt) : metadata.componentName}'
+        replicas: '${environmentConfigs.autoscaling.enabled ? environmentConfigs.autoscaling.minReplicas : environmentConfigs.replicas}'
+        updateStrategy:
+          type: Recreate
+          
+  - id: hpa
+    forEach: '${environmentConfigs.autoscaling.enabled ? ["hpa"] : []}'
+    var: _
+    template:
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: ${metadata.componentName}
+        namespace: ${metadata.namespace}
+        labels: ${metadata.labels}
+      spec:
+        scaleTargetRef:
+          apiVersion: extensions.agents.x-k8s.io/v1alpha1
+          kind: SandboxWarmPool
+          name: ${metadata.componentName}
+        minReplicas: ${environmentConfigs.autoscaling.minReplicas}
+        maxReplicas: ${environmentConfigs.autoscaling.maxReplicas}
+        metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: ${environmentConfigs.aut
 
     - id: service
       template:

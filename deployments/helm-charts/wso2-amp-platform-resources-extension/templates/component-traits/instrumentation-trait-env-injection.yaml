@@ -81,21 +81,21 @@ spec:
   # are unaffected.
   patches:
     - target:
-        kind: Deployment
-        group: apps
-        version: v1
+        kind: SandboxTemplate
+        group: extensions.agents.x-k8s.io
+        version: v1alpha1
         where: |
           ${has(environmentConfigs.envInjectionEnabled) ? environmentConfigs.envInjectionEnabled : parameters.envInjectionEnabled}
       operations:
         - op: add
-          path: /spec/template/spec/containers/0/env/-
+          path: /spec/podTemplate/spec/containers/0/env/-
           value:
             name: ${parameters.otelEndpointEnvName}
             # Derived from the apiGatewayName helper convention ("api-platform-<org>-<env>")
             # + the gateway runtime in-cluster Service.
             value: "http://api-platform-${metadata.componentNamespace}-${metadata.environmentName}-gateway-gateway-runtime.openchoreo-data-plane:22893/otel"
         - op: add
-          path: /spec/template/spec/containers/0/env/-
+          path: /spec/podTemplate/spec/containers/0/env/-
           value:
             name: ${parameters.apiKeyEnvName}
             valueFrom:
