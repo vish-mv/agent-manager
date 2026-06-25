@@ -983,9 +983,11 @@ func toDeploymentDetailsResponse(binding *gen.ReleaseBinding, componentRelease *
 		environmentDisplayName = env.DisplayName
 	}
 
-	// Use the Ready condition's LastTransitionTime for accurate last deployed time,
-	// falling back to CreationTimestamp if no Ready condition is found
-	lastDeployedAt := getLastDeployedTime(binding)
+	t := getLastDeployedTime(binding)
+	var lastDeployedAt *time.Time
+	if !t.IsZero() {
+		lastDeployedAt = &t
+	}
 
 	return &models.DeploymentResponse{
 		ImageId:                    deployedImage,
@@ -999,18 +1001,31 @@ func toDeploymentDetailsResponse(binding *gen.ReleaseBinding, componentRelease *
 }
 
 // getLastDeployedTime extracts the most accurate last deployed time from a ReleaseBinding.
-// It looks for the Ready condition's LastTransitionTime, falling back to CreationTimestamp.
+// Sandbox agents stay Ready=True across redeploys — only LastSpecUpdateTime changes on each
+// deploy — so we take the max of both to return the true last-deployed time.
 func getLastDeployedTime(binding *gen.ReleaseBinding) time.Time {
-	// Try to get LastTransitionTime from the Ready condition
-	if binding.Status != nil && binding.Status.Conditions != nil {
-		for _, condition := range *binding.Status.Conditions {
-			if condition.Type == "Ready" {
-				return condition.LastTransitionTime
+	var readyTime, specUpdateTime time.Time
+
+	if binding.Status != nil {
+		if binding.Status.Conditions != nil {
+			for _, c := range *binding.Status.Conditions {
+				if c.Type == "Ready" {
+					readyTime = c.LastTransitionTime
+				}
 			}
+		}
+		if binding.Status.LastSpecUpdateTime != nil {
+			specUpdateTime = *binding.Status.LastSpecUpdateTime
 		}
 	}
 
-	// Fall back to CreationTimestamp if no Ready condition found
+	t := readyTime
+	if specUpdateTime.After(t) {
+		t = specUpdateTime
+	}
+	if !t.IsZero() {
+		return t
+	}
 	if binding.Metadata.CreationTimestamp != nil {
 		return *binding.Metadata.CreationTimestamp
 	}
