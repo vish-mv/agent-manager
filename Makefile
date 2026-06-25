@@ -14,6 +14,7 @@ help:
 	@echo "  make setup-colima            - Start Colima VM"
 	@echo "  make setup-k3d              - Create k3d cluster"
 	@echo "  make setup-openchoreo        - Install OpenChoreo on k3d"
+	@echo "  make setup-sandbox           - Install Agent Sandbox module (run after setup-openchoreo)"
 	@echo "  make setup-platform          - Build images and start core platform services"
 	@echo "  make setup-gateway           - Install API Platform Gateway (run via make setup)"
 	@echo "  make setup-console-local     - Install console deps (only if changed)"
@@ -59,7 +60,7 @@ help:
 	@echo ""
 
 # Complete setup
-setup: setup-colima setup-k3d setup-openchoreo setup-platform setup-console-local
+setup: setup-colima setup-k3d setup-openchoreo setup-platform setup-sandbox setup-console-local
 	@$(MAKE) dev-migrate
 	@cd deployments/setup && ./port-forward.sh --platform --background
 	@$(MAKE) setup-gateway
@@ -83,6 +84,9 @@ setup-k3d:
 
 setup-openchoreo:
 	@cd deployments/setup && ./setup-openchoreo.sh $(CURDIR)
+
+setup-sandbox:
+   @cd deployments/scripts && ./setup-sandbox.sh
 
 gen-keys:
 	@echo "🔑 Generating JWT signing keys..."
