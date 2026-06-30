@@ -342,7 +342,7 @@ func (c *openChoreoClient) setRestartedAt(ctx context.Context, namespaceName, co
 // pod rollout. Splitting them produced races (two separate updates contending on the same
 // resourceVersion) without giving callers any control they'd actually use.
 // Returns ErrNotFound when no binding exists yet for (component, environment).
-func (c *openChoreoClient) UpdateReleaseBindingTraitConfigs(ctx context.Context, namespaceName, componentName, environment string, traitConfigs map[string]interface{}) error {
+func (c *openChoreoClient) UpdateReleaseBindingTraitConfigs(ctx context.Context, namespaceName, componentName, environment string, traitConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error {
 	binding, err := c.findReleaseBindingForEnv(ctx, namespaceName, componentName, environment)
 	if err != nil {
 		return err
@@ -357,6 +357,56 @@ func (c *openChoreoClient) UpdateReleaseBindingTraitConfigs(ctx context.Context,
 			overrides := make(map[string]interface{})
 			rb.Spec.ComponentTypeEnvironmentConfigs = &overrides
 		}
+		(*rb.Spec.ComponentTypeEnvironmentConfigs)["restartedAt"] = time.Now().Format(time.RFC3339)
+		// Merge component-type configs (e.g. runtimeClassName from the env's isolation tier).
+		for k, v := range componentTypeConfigs {
+			(*rb.Spec.ComponentTypeEnvironmentConfigs)[k] = v
+		}
+	})
+}
+
+// EnsureReleaseBindingRuntimeClass idempotently reconciles runtimeClassName on a release
+// binding's ComponentTypeEnvironmentConfigs for (component, environment).
+//
+// Why this exists: OpenChoreo's AutoDeploy creates the release binding when a build completes,
+// WITHOUT going through the backend's deploy-time config write — so an agent in an isolation-tier
+// environment first comes up on the default (runc) runtime. This is called from the deploy-status
+// read path to correct that out-of-band binding.
+//
+// It is strictly idempotent: it writes (and bumps restartedAt once, to roll the warm pods onto the
+// isolation node) ONLY when the binding's current runtimeClassName differs from desired. Once
+// correct, every subsequent call is a no-op — no write, no restart loop. Returns nil (no-op) when
+// desired is empty or the binding does not exist yet (build/auto-deploy not finished).
+func (c *openChoreoClient) EnsureReleaseBindingRuntimeClass(ctx context.Context, namespaceName, componentName, environment, desiredRuntimeClass string) error {
+	if desiredRuntimeClass == "" {
+		return nil
+	}
+	binding, err := c.findReleaseBindingForEnv(ctx, namespaceName, componentName, environment)
+	if err != nil {
+		return err
+	}
+	if binding == nil {
+		return nil // binding not created yet — nothing to reconcile
+	}
+
+	current := ""
+	if binding.Spec != nil && binding.Spec.ComponentTypeEnvironmentConfigs != nil {
+		if v, ok := (*binding.Spec.ComponentTypeEnvironmentConfigs)["runtimeClassName"].(string); ok {
+			current = v
+		}
+	}
+	if current == desiredRuntimeClass {
+		return nil // already correct — idempotent no-op
+	}
+
+	return c.retryReleaseBindingUpdate(ctx, namespaceName, binding.Metadata.Name, func(rb *gen.ReleaseBinding) {
+		if rb.Spec.ComponentTypeEnvironmentConfigs == nil {
+			overrides := make(map[string]interface{})
+			rb.Spec.ComponentTypeEnvironmentConfigs = &overrides
+		}
+		(*rb.Spec.ComponentTypeEnvironmentConfigs)["runtimeClassName"] = desiredRuntimeClass
+		// Bump restartedAt so the SandboxTemplate re-renders and the warm pods roll onto the
+		// isolation node. Only runs on correction (current != desired), so there is no restart loop.
 		(*rb.Spec.ComponentTypeEnvironmentConfigs)["restartedAt"] = time.Now().Format(time.RFC3339)
 	})
 }
@@ -402,7 +452,7 @@ func (c *openChoreoClient) ReplaceReleaseBindingWorkloadOverrides(ctx context.Co
 // PromoteComponent promotes a component from sourceEnvironment to targetEnvironment.
 // It finds the release name deployed in the source environment, then creates or updates
 // a release binding in the target environment using the naming convention {componentName}-{targetEnv}.
-func (c *openChoreoClient) PromoteComponent(ctx context.Context, namespaceName, projectName, componentName, sourceEnvironment, targetEnvironment string, envOverrides []EnvVar, fileOverrides []FileVar, traitEnvConfigs map[string]interface{}) error {
+func (c *openChoreoClient) PromoteComponent(ctx context.Context, namespaceName, projectName, componentName, sourceEnvironment, targetEnvironment string, envOverrides []EnvVar, fileOverrides []FileVar, traitEnvConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error {
 	// Step 1: List release bindings for the component to find the source release name
 	bindingsResp, err := c.ocClient.ListReleaseBindingsWithResponse(ctx, namespaceName, &gen.ListReleaseBindingsParams{
 		Component: &componentName,
@@ -469,6 +519,12 @@ func (c *openChoreoClient) PromoteComponent(ctx context.Context, namespaceName, 
 		traitConfigs = &traitEnvConfigs
 	}
 
+	// Build component type environment configs (e.g. runtimeClassName from the env's isolation tier).
+	var ctConfigs *map[string]interface{}
+	if len(componentTypeConfigs) > 0 {
+		ctConfigs = &componentTypeConfigs
+	}
+
 	// Step 4: Create or update the release binding in the target environment
 	if getResp.StatusCode() == http.StatusOK && getResp.JSON200 != nil && getResp.JSON200.Spec != nil {
 		activeState := gen.ReleaseBindingSpecStateActive
@@ -479,6 +535,9 @@ func (c *openChoreoClient) PromoteComponent(ctx context.Context, namespaceName, 
 			// clears any stale target-specific env vars, file mounts, or trait configs.
 			binding.Spec.WorkloadOverrides = workloadOverrides
 			binding.Spec.TraitEnvironmentConfigs = traitConfigs
+			if ctConfigs != nil {
+				binding.Spec.ComponentTypeEnvironmentConfigs = ctConfigs
+			}
 		}); err != nil {
 			return err
 		}
@@ -491,11 +550,12 @@ func (c *openChoreoClient) PromoteComponent(ctx context.Context, namespaceName, 
 				Namespace: &namespaceName,
 			},
 			Spec: &gen.ReleaseBindingSpec{
-				Environment:             targetEnvironment,
-				ReleaseName:             &sourceReleaseName,
-				State:                   &activeState,
-				WorkloadOverrides:       workloadOverrides,
-				TraitEnvironmentConfigs: traitConfigs,
+				Environment:                     targetEnvironment,
+				ReleaseName:                     &sourceReleaseName,
+				State:                           &activeState,
+				WorkloadOverrides:               workloadOverrides,
+				TraitEnvironmentConfigs:         traitConfigs,
+				ComponentTypeEnvironmentConfigs: ctConfigs,
 				Owner: struct {
 					ComponentName string `json:"componentName"`
 					ProjectName   string `json:"projectName"`

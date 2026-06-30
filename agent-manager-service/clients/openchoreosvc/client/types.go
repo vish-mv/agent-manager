@@ -198,12 +198,13 @@ type ComponentResourceConfigsResponse struct {
 
 // CreateEnvironmentRequest contains data for creating an environment
 type CreateEnvironmentRequest struct {
-	Name         string
-	DisplayName  string
-	Description  string
-	DataplaneRef string
-	IsProduction bool
-	Gateway      *GatewaySpec
+	Name          string
+	DisplayName   string
+	Description   string
+	IsolationTier string
+	DataplaneRef  string
+	IsProduction  bool
+	Gateway       *GatewaySpec
 }
 
 // UpdateEnvironmentRequest contains data for updating an environment

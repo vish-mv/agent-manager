@@ -1,4 +1,4 @@
-.PHONY: help setup setup-colima setup-k3d setup-openchoreo setup-platform setup-gateway setup-console-local setup-console-local-force dev-up dev-down dev-restart dev-rebuild dev-logs dev-migrate openchoreo-up openchoreo-down openchoreo-status teardown db-connect db-logs service-logs service-shell console-logs port-forward stop-port-forward gen-eval-artifacts gen-instrumentation-contract check-contract-drift check-matrix-manifest e2e-test
+.PHONY: help setup setup-colima setup-k3d setup-openchoreo setup-sandbox setup-gvisor setup-kata setup-platform setup-gateway setup-console-local setup-console-local-force dev-up dev-down dev-restart dev-rebuild dev-logs dev-migrate openchoreo-up openchoreo-down openchoreo-status teardown db-connect db-logs service-logs service-shell console-logs port-forward stop-port-forward gen-eval-artifacts gen-instrumentation-contract check-contract-drift check-matrix-manifest e2e-test
 
 # Absolute path to the console directory on the host. Passed to docker-compose
 # so the container mounts and builds at the same path, keeping rush/pnpm
@@ -15,6 +15,8 @@ help:
 	@echo "  make setup-k3d              - Create k3d cluster"
 	@echo "  make setup-openchoreo        - Install OpenChoreo on k3d"
 	@echo "  make setup-sandbox           - Install Agent Sandbox module (run after setup-openchoreo)"
+	@echo "  make setup-gvisor            - Add a gVisor (runsc) isolation node to the cluster (run after make setup)"
+	@echo "  make setup-kata              - Add a Kata (kata-qemu VM) isolation node to the cluster (needs nested virt; run after make setup)"
 	@echo "  make setup-platform          - Build images and start core platform services"
 	@echo "  make setup-gateway           - Install API Platform Gateway (run via make setup)"
 	@echo "  make setup-console-local     - Install console deps (only if changed)"
@@ -86,7 +88,13 @@ setup-openchoreo:
 	@cd deployments/setup && ./setup-openchoreo.sh $(CURDIR)
 
 setup-sandbox:
-   @cd deployments/scripts && ./setup-sandbox.sh
+	@cd deployments/scripts && ./setup-sandbox.sh
+
+setup-gvisor:
+	@cd deployments/setup && ./setup-gvisor-node.sh
+
+setup-kata:
+	@cd deployments/setup && ./setup-kata-node.sh
 
 gen-keys:
 	@echo "🔑 Generating JWT signing keys..."

@@ -186,7 +186,10 @@ func CreateMockOpenChoreoClient() *clientmocks.OpenChoreoClientMock {
 		GetComponentFileMountsFunc: func(ctx context.Context, namespaceName string, projectName string, componentName string, environment string) ([]models.FileMountEntry, error) {
 			return nil, nil
 		},
-		UpdateReleaseBindingTraitConfigsFunc: func(ctx context.Context, namespaceName, componentName, environment string, traitConfigs map[string]interface{}) error {
+		UpdateReleaseBindingTraitConfigsFunc: func(ctx context.Context, namespaceName, componentName, environment string, traitConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error {
+			return nil
+		},
+		EnsureReleaseBindingRuntimeClassFunc: func(ctx context.Context, namespaceName, componentName, environment, desiredRuntimeClass string) error {
 			return nil
 		},
 	}

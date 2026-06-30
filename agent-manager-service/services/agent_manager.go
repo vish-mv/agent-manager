@@ -2482,9 +2482,15 @@ func (s *agentManagerService) DeployAgent(ctx context.Context, orgName string, p
 		return "", err
 	}
 
-	// Update trait environment configs on the release binding after deploy
-	if len(deployTraitEnvConfigs) > 0 {
-		if err := s.ocClient.UpdateReleaseBindingTraitConfigs(ctx, orgName, agentName, lowestEnv, deployTraitEnvConfigs); err != nil {
+	// Update trait + component-type environment configs (e.g. runtimeClassName) on the release binding after deploy.
+	// Component-type configs (runtimeClassName) only apply to sandboxed API agents; external agents have no pod,
+	// so gate on isAPIAgent to match PromoteAgent and avoid writing an irrelevant key to their bindings.
+	var deployCTConfigs map[string]interface{}
+	if isAPIAgent {
+		deployCTConfigs = buildComponentTypeEnvConfigs(targetEnv)
+	}
+	if len(deployTraitEnvConfigs) > 0 || len(deployCTConfigs) > 0 {
+		if err := s.ocClient.UpdateReleaseBindingTraitConfigs(ctx, orgName, agentName, lowestEnv, deployTraitEnvConfigs, deployCTConfigs); err != nil {
 			s.logger.Warn("Failed to update trait environment configs on release binding", "agentName", agentName, "environment", lowestEnv, "error", err)
 		}
 	}
@@ -2750,6 +2756,36 @@ func buildPolicies(cfg resolvedCORSConfig) []map[string]interface{} {
 	return policies
 }
 
+// runtimeClassForIsolationTier maps an environment's isolation tier to the Kubernetes
+// runtimeClassName the agent-api ComponentType should request. Empty means "omit" (default runc).
+func runtimeClassForIsolationTier(tier string) string {
+	switch tier {
+	case "gvisor":
+		return "gvisor"
+	case "kata":
+		// kata-deploy registers the runtime under the "kata-qemu" RuntimeClass/handler
+		// (the QEMU hypervisor variant). The tier name stays "kata" at the API; only the
+		// rendered runtimeClassName is "kata-qemu" so it matches what the node installs.
+		return "kata-qemu"
+	default:
+		return ""
+	}
+}
+
+// buildComponentTypeEnvConfigs builds the ComponentTypeEnvironmentConfigs overrides for a deployment,
+// derived from the target environment's isolation tier. Returns an empty map for the default (runc)
+// tier so the rendered SandboxTemplate is unchanged for existing environments.
+func buildComponentTypeEnvConfigs(env *models.EnvironmentResponse) map[string]interface{} {
+	configs := map[string]interface{}{}
+	if env == nil {
+		return configs
+	}
+	if rc := runtimeClassForIsolationTier(env.IsolationTier); rc != "" {
+		configs["runtimeClassName"] = rc
+	}
+	return configs
+}
+
 // buildTraitEnvConfigs builds the traitEnvironmentConfigs map for a release binding.
 // Keys must be trait instance names (format: "{componentName}-{traitName}") because
 // OpenChoreo's rendering engine looks up traitEnvironmentConfigs by instance name.
@@ -2945,6 +2981,7 @@ func (s *agentManagerService) PromoteAgent(ctx context.Context, orgName string, 
 
 	// Build trait environment configs for per-environment trait overrides
 	var traitEnvConfigs map[string]interface{}
+	var promoteCTConfigs map[string]interface{}
 	isAPIAgent := agent.Type.Type == string(utils.AgentTypeAPI)
 	if isAPIAgent {
 		// Resolve config values: request > source env DB > defaults
@@ -2990,6 +3027,7 @@ func (s *agentManagerService) PromoteAgent(ctx context.Context, orgName string, 
 		promotePythonBuildpack := agent.Build != nil && agent.Build.Buildpack != nil && agent.Build.Buildpack.Language == string(utils.LanguagePython)
 		promoteBallerinaBuildpack := agent.Build != nil && agent.Build.Buildpack != nil && agent.Build.Buildpack.Language == string(utils.LanguageBallerina)
 		traitEnvConfigs = buildTraitEnvConfigs(agentName, policies, targetArtifactID, promotePythonBuildpack, promoteBallerinaBuildpack, tracingCfg.EnableAutoInstrumentation)
+		promoteCTConfigs = buildComponentTypeEnvConfigs(targetEnv)
 
 		apiKey, apiKeyErr := s.generateAgentAPIKey(ctx, orgName, projectName, agentName, req.TargetEnvironment)
 		if apiKeyErr != nil {
@@ -3037,7 +3075,7 @@ func (s *agentManagerService) PromoteAgent(ctx context.Context, orgName string, 
 	}
 
 	// Promote via OC client
-	if err := s.ocClient.PromoteComponent(ctx, orgName, projectName, agentName, req.SourceEnvironment, req.TargetEnvironment, envOverrides, fileOverrides, traitEnvConfigs); err != nil {
+	if err := s.ocClient.PromoteComponent(ctx, orgName, projectName, agentName, req.SourceEnvironment, req.TargetEnvironment, envOverrides, fileOverrides, traitEnvConfigs, promoteCTConfigs); err != nil {
 		s.logger.Error("Failed to promote agent", "agentName", agentName, "sourceEnvironment", req.SourceEnvironment, "targetEnvironment", req.TargetEnvironment, "error", err)
 		return fmt.Errorf("failed to promote agent: %w", err)
 	}
@@ -3105,8 +3143,9 @@ func (s *agentManagerService) UpdateAgentDeploySettings(ctx context.Context, org
 	isBallerinaBuildpack := agent.Build != nil && agent.Build.Buildpack != nil && agent.Build.Buildpack.Language == string(utils.LanguageBallerina)
 	traitEnvConfigs := buildTraitEnvConfigs(agentName, policies, artifact.UUID.String(), isPythonBuildpack, isBallerinaBuildpack, tracingCfg.EnableAutoInstrumentation)
 
-	// Apply to the release binding (atomic: trait configs + restartedAt in a single update).
-	if updateErr := s.ocClient.UpdateReleaseBindingTraitConfigs(ctx, orgName, agentName, req.EnvironmentName, traitEnvConfigs); updateErr != nil {
+	// Apply to the release binding (atomic: trait configs + component-type configs + restartedAt in a single update).
+	settingsCTConfigs := buildComponentTypeEnvConfigs(targetEnv)
+	if updateErr := s.ocClient.UpdateReleaseBindingTraitConfigs(ctx, orgName, agentName, req.EnvironmentName, traitEnvConfigs, settingsCTConfigs); updateErr != nil {
 		s.logger.Error("Failed to update release binding deploy settings", "agentName", agentName, "environment", req.EnvironmentName, "error", updateErr)
 		return fmt.Errorf("failed to update deploy settings: %w", updateErr)
 	}
@@ -3689,7 +3728,52 @@ func (s *agentManagerService) GetAgentDeployments(ctx context.Context, orgName s
 	}
 
 	s.logger.Info("Fetched deployments successfully", "agentName", agentName, "orgName", orgName, "projectName", projectName, "deploymentCount", len(deployments))
+
+	// Reconcile isolation-tier runtimeClassName on out-of-band bindings. OpenChoreo's AutoDeploy
+	// creates a release binding when a build completes, WITHOUT the backend's deploy-time config
+	// write — so an agent in a gVisor/Kata environment first comes up on the default runtime. The
+	// deploy-status poll is the natural point to detect that the binding now exists and correct it.
+	// Best-effort and idempotent: it never fails the read, is a no-op for all-runc setups, and
+	// converges in a single write per binding.
+	s.reconcileIsolationRuntimeClass(ctx, orgName, agentName, deployments)
+
 	return deployments, nil
+}
+
+// reconcileIsolationRuntimeClass ensures every deployment whose environment has an isolation tier
+// carries the matching runtimeClassName on its release binding. See EnsureReleaseBindingRuntimeClass
+// for why this is needed (AutoDeploy bypasses the deploy-time config write). Best-effort: failures
+// are logged and ignored so they never break the deployments read.
+func (s *agentManagerService) reconcileIsolationRuntimeClass(ctx context.Context, orgName, agentName string, deployments []*models.DeploymentResponse) {
+	if len(deployments) == 0 {
+		return
+	}
+	envs, err := s.ocClient.ListEnvironments(ctx, orgName)
+	if err != nil {
+		s.logger.Warn("isolation reconcile: failed to list environments", "agentName", agentName, "error", err)
+		return
+	}
+	// Map only the environments that actually have an isolation tier; for all-runc setups this
+	// stays empty and we skip the work entirely.
+	rcByEnv := make(map[string]string)
+	for _, e := range envs {
+		if rc := runtimeClassForIsolationTier(e.IsolationTier); rc != "" {
+			rcByEnv[e.Name] = rc
+		}
+	}
+	if len(rcByEnv) == 0 {
+		return
+	}
+	for _, d := range deployments {
+		rc, ok := rcByEnv[d.Environment]
+		if !ok {
+			continue
+		}
+		if err := s.ocClient.EnsureReleaseBindingRuntimeClass(ctx, orgName, agentName, d.Environment, rc); err != nil {
+			s.logger.Warn("isolation reconcile: failed to set runtimeClassName",
+				"agentName", agentName, "environment", d.Environment, "runtimeClass", rc, "error", err)
+		}
+	}
 }
 
 // UpdateAgentDeploymentState updates the deployment state of an agent in a specific environment

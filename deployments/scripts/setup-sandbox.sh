@@ -6,8 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-source "$SCRIPT_DIR/env.sh"
-source "$SCRIPT_DIR/utils.sh"
+# env.sh and utils.sh live in deployments/setup/ (this script is in deployments/scripts/).
+source "$SCRIPT_DIR/../setup/env.sh"
+source "$SCRIPT_DIR/../setup/utils.sh"
 
 
 echo "=== Installing Agent Sandbox module ==="

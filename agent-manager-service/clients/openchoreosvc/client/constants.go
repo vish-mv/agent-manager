@@ -174,8 +174,9 @@ const (
 // -----------------------------------------------------------------------------
 
 const (
-	AnnotationKeyDisplayName = "openchoreo.dev/display-name"
-	AnnotationKeyDescription = "openchoreo.dev/description"
+	AnnotationKeyDisplayName   = "openchoreo.dev/display-name"
+	AnnotationKeyDescription   = "openchoreo.dev/description"
+	AnnotationKeyIsolationTier = "openchoreo.dev/isolation-tier"
 )
 
 // / -----------------------------------------------------------------------------

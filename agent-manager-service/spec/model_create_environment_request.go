@@ -25,6 +25,8 @@ type CreateEnvironmentRequest struct {
 	DisplayName string `json:"displayName"`
 	// Optional description of the environment
 	Description *string `json:"description,omitempty"`
+	// Pod runtime isolation tier ("gvisor", "kata", or empty for default runc)
+	IsolationTier string `json:"isolationTier,omitempty"`
 	// Reference to the dataplane
 	DataplaneRef string `json:"dataplaneRef"`
 	// DNS prefix for the environment

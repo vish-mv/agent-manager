@@ -374,7 +374,7 @@ type OpenChoreoClientMock struct {
 	PatchProjectFunc func(ctx context.Context, namespaceName string, projectName string, req client.PatchProjectRequest) error
 
 	// PromoteComponentFunc mocks the PromoteComponent method.
-	PromoteComponentFunc func(ctx context.Context, namespaceName string, projectName string, componentName string, sourceEnvironment string, targetEnvironment string, envOverrides []client.EnvVar, fileOverrides []client.FileVar, traitEnvConfigs map[string]interface{}) error
+	PromoteComponentFunc func(ctx context.Context, namespaceName string, projectName string, componentName string, sourceEnvironment string, targetEnvironment string, envOverrides []client.EnvVar, fileOverrides []client.FileVar, traitEnvConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error
 
 	// RemoveComponentEnvironmentVariablesFunc mocks the RemoveComponentEnvironmentVariables method.
 	RemoveComponentEnvironmentVariablesFunc func(ctx context.Context, namespaceName string, projectName string, componentName string, envVarKeys []string) error
@@ -428,7 +428,10 @@ type OpenChoreoClientMock struct {
 	UpdateReleaseBindingEnvVarsFunc func(ctx context.Context, namespaceName string, projectName string, componentName string, envName string, envVars []client.EnvVar) error
 
 	// UpdateReleaseBindingTraitConfigsFunc mocks the UpdateReleaseBindingTraitConfigs method.
-	UpdateReleaseBindingTraitConfigsFunc func(ctx context.Context, namespaceName string, componentName string, environment string, traitConfigs map[string]interface{}) error
+	UpdateReleaseBindingTraitConfigsFunc func(ctx context.Context, namespaceName string, componentName string, environment string, traitConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error
+
+	// EnsureReleaseBindingRuntimeClassFunc mocks the EnsureReleaseBindingRuntimeClass method.
+	EnsureReleaseBindingRuntimeClassFunc func(ctx context.Context, namespaceName string, componentName string, environment string, desiredRuntimeClass string) error
 
 	// UpdateSecretReferenceFunc mocks the UpdateSecretReference method.
 	UpdateSecretReferenceFunc func(ctx context.Context, namespaceName string, secretRefName string, req client.CreateSecretReferenceRequest) (*client.SecretReferenceInfo, error)
@@ -3293,7 +3296,7 @@ func (mock *OpenChoreoClientMock) PatchProjectCalls() []struct {
 }
 
 // PromoteComponent calls PromoteComponentFunc.
-func (mock *OpenChoreoClientMock) PromoteComponent(ctx context.Context, namespaceName string, projectName string, componentName string, sourceEnvironment string, targetEnvironment string, envOverrides []client.EnvVar, fileOverrides []client.FileVar, traitEnvConfigs map[string]interface{}) error {
+func (mock *OpenChoreoClientMock) PromoteComponent(ctx context.Context, namespaceName string, projectName string, componentName string, sourceEnvironment string, targetEnvironment string, envOverrides []client.EnvVar, fileOverrides []client.FileVar, traitEnvConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error {
 	if mock.PromoteComponentFunc == nil {
 		panic("OpenChoreoClientMock.PromoteComponentFunc: method is nil but OpenChoreoClient.PromoteComponent was just called")
 	}
@@ -3321,7 +3324,7 @@ func (mock *OpenChoreoClientMock) PromoteComponent(ctx context.Context, namespac
 	mock.lockPromoteComponent.Lock()
 	mock.calls.PromoteComponent = append(mock.calls.PromoteComponent, callInfo)
 	mock.lockPromoteComponent.Unlock()
-	return mock.PromoteComponentFunc(ctx, namespaceName, projectName, componentName, sourceEnvironment, targetEnvironment, envOverrides, fileOverrides, traitEnvConfigs)
+	return mock.PromoteComponentFunc(ctx, namespaceName, projectName, componentName, sourceEnvironment, targetEnvironment, envOverrides, fileOverrides, traitEnvConfigs, componentTypeConfigs)
 }
 
 // PromoteComponentCalls gets all the calls that were made to PromoteComponent.
@@ -4197,7 +4200,7 @@ func (mock *OpenChoreoClientMock) UpdateReleaseBindingEnvVarsCalls() []struct {
 }
 
 // UpdateReleaseBindingTraitConfigs calls UpdateReleaseBindingTraitConfigsFunc.
-func (mock *OpenChoreoClientMock) UpdateReleaseBindingTraitConfigs(ctx context.Context, namespaceName string, componentName string, environment string, traitConfigs map[string]interface{}) error {
+func (mock *OpenChoreoClientMock) UpdateReleaseBindingTraitConfigs(ctx context.Context, namespaceName string, componentName string, environment string, traitConfigs map[string]interface{}, componentTypeConfigs map[string]interface{}) error {
 	if mock.UpdateReleaseBindingTraitConfigsFunc == nil {
 		panic("OpenChoreoClientMock.UpdateReleaseBindingTraitConfigsFunc: method is nil but OpenChoreoClient.UpdateReleaseBindingTraitConfigs was just called")
 	}
@@ -4217,7 +4220,15 @@ func (mock *OpenChoreoClientMock) UpdateReleaseBindingTraitConfigs(ctx context.C
 	mock.lockUpdateReleaseBindingTraitConfigs.Lock()
 	mock.calls.UpdateReleaseBindingTraitConfigs = append(mock.calls.UpdateReleaseBindingTraitConfigs, callInfo)
 	mock.lockUpdateReleaseBindingTraitConfigs.Unlock()
-	return mock.UpdateReleaseBindingTraitConfigsFunc(ctx, namespaceName, componentName, environment, traitConfigs)
+	return mock.UpdateReleaseBindingTraitConfigsFunc(ctx, namespaceName, componentName, environment, traitConfigs, componentTypeConfigs)
+}
+
+// EnsureReleaseBindingRuntimeClass calls EnsureReleaseBindingRuntimeClassFunc.
+func (mock *OpenChoreoClientMock) EnsureReleaseBindingRuntimeClass(ctx context.Context, namespaceName string, componentName string, environment string, desiredRuntimeClass string) error {
+	if mock.EnsureReleaseBindingRuntimeClassFunc == nil {
+		panic("OpenChoreoClientMock.EnsureReleaseBindingRuntimeClassFunc: method is nil but OpenChoreoClient.EnsureReleaseBindingRuntimeClass was just called")
+	}
+	return mock.EnsureReleaseBindingRuntimeClassFunc(ctx, namespaceName, componentName, environment, desiredRuntimeClass)
 }
 
 // UpdateReleaseBindingTraitConfigsCalls gets all the calls that were made to UpdateReleaseBindingTraitConfigs.

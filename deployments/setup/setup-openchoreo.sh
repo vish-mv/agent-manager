@@ -218,7 +218,14 @@ install_observability_plane() {
       --set adapter.openSearchSecretName="opensearch-admin-credentials"
     echo "✅ OpenSearch based logs module installed"
 
-    # Enable logs collection in the configured logs module
+    # Enable logs collection in the configured logs module.
+    # fluent-bit.tolerations[operator=Exists] lets the Fluent Bit log collector (a
+    # DaemonSet, one pod per node) run on EVERY node, including tainted isolation-tier
+    # nodes such as the gVisor node (setup-gvisor-node.sh) or the Kata node
+    # (setup-kata-node.sh). Without it, agents on those nodes produce no runtime logs
+    # because no collector tails that node's container logs. operator=Exists tolerates
+    # any taint, so both the gvisor and kata taints are covered. Harmless for all-runc
+    # clusters (the toleration just matches nothing).
     echo "Enabling log collection in Observability Plane..."
     helm upgrade observability-logs-opensearch \
       oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
@@ -226,7 +233,8 @@ install_observability_plane() {
       --namespace openchoreo-observability-plane \
       --version "${OBSERVABILITY_LOGS_OPENSEARCH_VERSION}" \
       --reuse-values \
-      --set fluent-bit.enabled=true
+      --set fluent-bit.enabled=true \
+      --set "fluent-bit.tolerations[0].operator=Exists"
     echo "✅ OpenSearch Log collection enabled"
 
     echo "Enabling opensearch based tracing module..."

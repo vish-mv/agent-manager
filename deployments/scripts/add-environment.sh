@@ -129,12 +129,26 @@ if [ -n "${ENV_INGRESS_HTTPS_HOST}" ]; then
     EXTERNAL_LISTENERS="${EXTERNAL_LISTENERS}, \"https\": {\"host\": \"${ENV_INGRESS_HTTPS_HOST}\", \"port\": ${ENV_INGRESS_HTTPS_PORT}}"
 fi
 
+# Optional pod runtime isolation tier for this environment. "gvisor" makes agents run
+# under the runsc RuntimeClass (requires a gVisor node — see `make setup-gvisor`); "kata"
+# makes them run under the kata-qemu RuntimeClass in a lightweight VM (requires a Kata node
+# with nested virtualization — see `make setup-kata`). Empty (default) uses the standard
+# runc runtime. Only include the field in the payload when set, so runc environments send
+# the exact same request body as before.
+ISOLATION_TIER="${ISOLATION_TIER:-}"
+ISOLATION_TIER_FIELD=""
+if [ -n "${ISOLATION_TIER}" ]; then
+    ISOLATION_TIER_FIELD="\"isolationTier\": \"${ISOLATION_TIER}\","
+    echo "   Isolation tier: ${ISOLATION_TIER}"
+fi
+
 ENV_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${AGENT_MANAGER_API_URL}/orgs/${ORG_NAME}/environments" \
     -H "${AUTH_HEADER}" \
     -H "Content-Type: application/json" \
     -d "{
         \"name\": \"${ENV_NAME}\",
         \"displayName\": \"${DISPLAY_NAME_JSON}\",
+        ${ISOLATION_TIER_FIELD}
         \"dataplaneRef\": \"${DATAPLANE_REF}\",
         \"dnsPrefix\": \"${ENV_NAME}\",
         \"isProduction\": ${IS_PRODUCTION},

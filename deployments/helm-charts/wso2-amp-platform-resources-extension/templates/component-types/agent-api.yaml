@@ -90,6 +90,9 @@ spec:
         restartedAt:
           type: string
           default: ""
+        runtimeClassName:
+          type: string
+          default: ""
         autoscaling:
           $ref: "#/$defs/AutoscalingConfig"
 
@@ -109,6 +112,10 @@ spec:
               annotations:
                 openchoreo.dev/restarted-at: ${environmentConfigs.restartedAt}
             spec:
+              # gVisor (or other) runtime selection per environment. For the default runc tier
+              # environmentConfigs.runtimeClassName is "" → oc_omit() → field absent → render
+              # byte-identical to a non-isolated environment (no pod restart for existing agents).
+              runtimeClassName: '${environmentConfigs.runtimeClassName != "" ? environmentConfigs.runtimeClassName : oc_omit()}'
               securityContext:
                 runAsNonRoot: true
                 runAsUser: 65534
@@ -153,75 +160,75 @@ spec:
                   {"name": "workspace", "emptyDir": {"sizeLimit": "500Mi"}},
                   {"name": "cache", "emptyDir": {"sizeLimit": "200Mi"}}
                 ]}
-        networkPolicy:
-          egress:
-            - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-            - to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: openchoreo-data-plane
-            - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 80
-                  protocol: TCP
-              to:
-                - ipBlock:
-                    cidr: 0.0.0.0/0
-                    except:
-                      - 10.0.0.0/8
-                      - 172.16.0.0/12
-                      - 192.168.0.0/16
-                      - 169.254.0.0/16
-                - ipBlock:
-                    cidr: ::/0
-                    except:
-                      - fc00::/7
-        networkPolicyManagement: Managed
+          networkPolicy:
+            egress:
+              - ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP
+              - to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: openchoreo-data-plane
+              - ports:
+                  - port: 443
+                    protocol: TCP
+                  - port: 80
+                    protocol: TCP
+                to:
+                  - ipBlock:
+                      cidr: 0.0.0.0/0
+                      except:
+                        - 10.0.0.0/8
+                        - 172.16.0.0/12
+                        - 192.168.0.0/16
+                        - 169.254.0.0/16
+                  - ipBlock:
+                      cidr: ::/0
+                      except:
+                        - fc00::/7
+          networkPolicyManagement: Managed
 
-  - id: sandbox-warmpool
-    template:
-      apiVersion: extensions.agents.x-k8s.io/v1alpha1
-      kind: SandboxWarmPool
-      metadata:
-        name: ${metadata.componentName}
-        namespace: ${metadata.namespace}
-        labels: ${metadata.labels}
-      spec:
-        sandboxTemplateRef:
-          name: '${environmentConfigs.restartedAt != "" ? oc_generate_name(metadata.componentName, environmentConfigs.restartedAt) : metadata.componentName}'
-        replicas: '${environmentConfigs.autoscaling.enabled ? environmentConfigs.autoscaling.minReplicas : environmentConfigs.replicas}'
-        updateStrategy:
-          type: Recreate
-          
-  - id: hpa
-    forEach: '${environmentConfigs.autoscaling.enabled ? ["hpa"] : []}'
-    var: _
-    template:
-      apiVersion: autoscaling/v2
-      kind: HorizontalPodAutoscaler
-      metadata:
-        name: ${metadata.componentName}
-        namespace: ${metadata.namespace}
-        labels: ${metadata.labels}
-      spec:
-        scaleTargetRef:
-          apiVersion: extensions.agents.x-k8s.io/v1alpha1
-          kind: SandboxWarmPool
+    - id: sandbox-warmpool
+      template:
+        apiVersion: extensions.agents.x-k8s.io/v1alpha1
+        kind: SandboxWarmPool
+        metadata:
           name: ${metadata.componentName}
-        minReplicas: ${environmentConfigs.autoscaling.minReplicas}
-        maxReplicas: ${environmentConfigs.autoscaling.maxReplicas}
-        metrics:
-          - type: Resource
-            resource:
-              name: cpu
-              target:
-                type: Utilization
-                averageUtilization: ${environmentConfigs.aut
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+        spec:
+          sandboxTemplateRef:
+            name: '${environmentConfigs.restartedAt != "" ? oc_generate_name(metadata.componentName, environmentConfigs.restartedAt) : metadata.componentName}'
+          replicas: '${environmentConfigs.autoscaling.enabled ? environmentConfigs.autoscaling.minReplicas : environmentConfigs.replicas}'
+          updateStrategy:
+            type: Recreate
+
+    - id: hpa
+      forEach: '${environmentConfigs.autoscaling.enabled ? ["hpa"] : []}'
+      var: _
+      template:
+        apiVersion: autoscaling/v2
+        kind: HorizontalPodAutoscaler
+        metadata:
+          name: ${metadata.componentName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+        spec:
+          scaleTargetRef:
+            apiVersion: extensions.agents.x-k8s.io/v1alpha1
+            kind: SandboxWarmPool
+            name: ${metadata.componentName}
+          minReplicas: ${environmentConfigs.autoscaling.minReplicas}
+          maxReplicas: ${environmentConfigs.autoscaling.maxReplicas}
+          metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: ${environmentConfigs.autoscaling.cpuUtilizationPercentage}
 
     - id: service
       template:
