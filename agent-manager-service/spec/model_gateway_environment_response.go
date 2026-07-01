@@ -370,6 +370,9 @@ func (o GatewayEnvironmentResponse) ToMap() (map[string]interface{}, error) {
 	}
 	toSerialize["dataplaneRef"] = o.DataplaneRef
 	toSerialize["dnsPrefix"] = o.DnsPrefix
+	if o.IsolationTier != "" {
+		toSerialize["isolationTier"] = o.IsolationTier
+	}
 	toSerialize["isProduction"] = o.IsProduction
 	if !IsNil(o.Gateway) {
 		toSerialize["gateway"] = o.Gateway

@@ -266,6 +266,9 @@ func (o CreateEnvironmentRequest) ToMap() (map[string]interface{}, error) {
 	}
 	toSerialize["dataplaneRef"] = o.DataplaneRef
 	toSerialize["dnsPrefix"] = o.DnsPrefix
+	if o.IsolationTier != "" {
+		toSerialize["isolationTier"] = o.IsolationTier
+	}
 	if !IsNil(o.IsProduction) {
 		toSerialize["isProduction"] = o.IsProduction
 	}
