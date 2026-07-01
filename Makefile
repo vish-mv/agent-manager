@@ -16,7 +16,7 @@ help:
 	@echo "  make setup-openchoreo        - Install OpenChoreo on k3d"
 	@echo "  make setup-sandbox           - Install Agent Sandbox module (run after setup-openchoreo)"
 	@echo "  make setup-gvisor            - Add a gVisor (runsc) isolation node to the cluster (run after make setup)"
-	@echo "  make setup-kata              - Add a Kata (kata-qemu VM) isolation node to the cluster (needs nested virt; run after make setup)"
+	@echo "  make setup-kata              - Join a real (non-Docker) node to the cluster and install Kata there (needs nested virt; run after make setup)"
 	@echo "  make setup-platform          - Build images and start core platform services"
 	@echo "  make setup-gateway           - Install API Platform Gateway (run via make setup)"
 	@echo "  make setup-console-local     - Install console deps (only if changed)"
