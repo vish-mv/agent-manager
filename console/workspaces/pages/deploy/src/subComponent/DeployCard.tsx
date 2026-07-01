@@ -93,6 +93,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditResourceConfigsDrawer } from "./EditResourceConfigsDrawer";
 import { PromoteAgentDrawer } from "./PromoteAgentDrawer";
 
+function isolationTierLabel(tier?: string): string {
+  switch (tier) {
+    case "gvisor":
+      return "gVisor";
+    case "kata":
+      return "Kata";
+    default:
+      return "Runc (default)";
+  }
+}
+
+function isolationTierColor(tier?: string): "default" | "info" | "secondary" {
+  switch (tier) {
+    case "gvisor":
+      return "info";
+    case "kata":
+      return "secondary";
+    default:
+      return "default";
+  }
+}
+
 function DeploymentStatusPanel({ status }: { status: DeploymentStatus }) {
   const theme = useTheme();
   const backgroundColor = useMemo(() => {
@@ -593,9 +615,17 @@ export function DeployCard(props: DeployCardProps) {
     >
       <CardContent>
         <Stack gap={2}>
-          <Typography variant="h5">
-            {currentEnvironment?.displayName} Environment
-          </Typography>
+          <Stack direction="row" gap={1} alignItems="center" justifyContent="space-between">
+            <Typography variant="h5">
+              {currentEnvironment?.displayName} Environment
+            </Typography>
+            <Chip
+              label={isolationTierLabel(currentEnvironment?.isolationTier)}
+              size="small"
+              variant="outlined"
+              color={isolationTierColor(currentEnvironment?.isolationTier)}
+            />
+          </Stack>
           <Divider />
           <Stack direction="row" gap={1} alignItems="center">
             <Typography variant="body2">Last Deployed</Typography>

@@ -53,6 +53,10 @@ import {
 
 const TOKEN_MASK = "•••••••••••••••";
 
+// TODO: replace with real published doc URLs once the isolation-tier setup guides are written.
+const GVISOR_ISOLATION_DOCS_URL = "https://example.com/docs/gvisor-isolation-tier";
+const KATA_ISOLATION_DOCS_URL = "https://example.com/docs/kata-isolation-tier";
+
 interface CreateEnvironmentDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -327,6 +331,39 @@ export function CreateEnvironmentDrawer({
               label="Production environment"
             />
           </Stack>
+
+          <Alert severity="info">
+            Want this environment to run under a stronger isolation tier
+            (gVisor or Kata) instead of the default? Set up the node first,
+            then add an{" "}
+            <Typography
+              component="code"
+              sx={{ bgcolor: "action.hover", px: 0.5, borderRadius: 0.5 }}
+            >
+              ISOLATION_TIER
+            </Typography>{" "}
+            variable to the command below yourself before running it. See the{" "}
+            <Typography
+              component="a"
+              href={GVISOR_ISOLATION_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ color: "primary.main" }}
+            >
+              gVisor setup guide
+            </Typography>{" "}
+            or the{" "}
+            <Typography
+              component="a"
+              href={KATA_ISOLATION_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ color: "primary.main" }}
+            >
+              Kata setup guide
+            </Typography>
+            .
+          </Alert>
 
           <Stack spacing={1}>
             <Typography variant="body2">

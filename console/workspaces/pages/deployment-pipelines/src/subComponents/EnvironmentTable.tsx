@@ -38,6 +38,28 @@ import { useListEnvironments } from "@agent-management-platform/api-client";
 import type { Environment } from "@agent-management-platform/types";
 import { FadeIn } from "@agent-management-platform/views";
 
+function isolationTierLabel(tier?: string): string {
+  switch (tier) {
+    case "gvisor":
+      return "gVisor";
+    case "kata":
+      return "Kata";
+    default:
+      return "Runc (default)";
+  }
+}
+
+function isolationTierColor(tier?: string): "default" | "info" | "secondary" {
+  switch (tier) {
+    case "gvisor":
+      return "info";
+    case "kata":
+      return "secondary";
+    default:
+      return "default";
+  }
+}
+
 interface EnvironmentTableProps {
   onEditEnvironment?: (environment: Environment) => void;
   onCreateEnvironment?: () => void;
@@ -199,6 +221,7 @@ export function EnvironmentTable(
                 <ListingTable.Cell>Environment</ListingTable.Cell>
                 <ListingTable.Cell>Data Plane</ListingTable.Cell>
                 <ListingTable.Cell align="center" width="160px">Type</ListingTable.Cell>
+                <ListingTable.Cell align="center" width="160px">Isolation Tier</ListingTable.Cell>
                 <ListingTable.Cell align="right" width="160px">Created</ListingTable.Cell>
               </ListingTable.Row>
             </ListingTable.Head>
@@ -245,6 +268,15 @@ export function EnvironmentTable(
                       size="small"
                       variant="outlined"
                       color={env.isProduction ? "primary" : "default"}
+                    />
+                  </ListingTable.Cell>
+
+                  <ListingTable.Cell align="center">
+                    <Chip
+                      label={isolationTierLabel(env.isolationTier)}
+                      size="small"
+                      variant="outlined"
+                      color={isolationTierColor(env.isolationTier)}
                     />
                   </ListingTable.Cell>
 

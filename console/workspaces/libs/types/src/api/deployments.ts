@@ -124,6 +124,7 @@ export interface Environment {
   dnsPrefix?: string;
   createdAt: string; // ISO date-time
   id?: string;
+  isolationTier?: string;
 }
 
 export type EnvironmentListResponse = Environment[];
