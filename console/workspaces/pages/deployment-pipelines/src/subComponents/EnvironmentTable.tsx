@@ -49,12 +49,12 @@ function isolationTierLabel(tier?: string): string {
   }
 }
 
-function isolationTierColor(tier?: string): "default" | "info" | "secondary" {
+function isolationTierColor(tier?: string): "default" | "info" | "success" {
   switch (tier) {
     case "gvisor":
       return "info";
     case "kata":
-      return "secondary";
+      return "success";
     default:
       return "default";
   }
