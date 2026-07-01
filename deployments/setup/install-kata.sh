@@ -164,6 +164,108 @@ rm -f "$TMP_DS"
 echo "⏳ Waiting for kata-deploy rollout (installs the Kata stack on the node)..."
 kubectl -n kube-system rollout status daemonset/kata-deploy --timeout=10m
 
+# --- 2b. k3s nodes: kata-deploy installs the Kata stack into /opt/kata but does NOT wire
+# k3s's containerd for it. Upstream kata-deploy only recognizes a handful of distro markers
+# (k3d, RKE2, ...) and otherwise falls back to writing /etc/containerd/config.toml +
+# `systemctl restart containerd` — neither of which k3s uses (k3s bundles its own containerd,
+# configured only via .../agent/etc/containerd/config.toml.tmpl, read only at containerd
+# startup). Left unfixed, pods get "no runtime for kata-qemu is configured" forever even
+# though kata-deploy itself reports success. Detect k3s via containerRuntimeVersion (e.g.
+# "containerd://2.1.4-k3s1.32") and patch directly via a privileged pod that nsenters the
+# host's namespaces — this works whether install-kata.sh runs on the node itself or from a
+# separate machine with only kubectl access (no SSH assumed).
+K3S_FIX_SCRIPT=$(cat <<'FIXEOF'
+set -e
+mkdir -p /usr/local/bin
+ln -sf /opt/kata/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-qemu-v2
+TMPL=/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+mkdir -p "$(dirname "$TMPL")"
+if grep -q "runtimes.kata-qemu" "$TMPL" 2>/dev/null; then
+    echo UNCHANGED
+else
+    cat > "$TMPL" <<'INNEREOF'
+{{ template "base" . }}
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu]
+  runtime_type = "io.containerd.kata-qemu.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu.options]
+    ConfigPath = "/opt/kata/share/defaults/kata-containers/configuration-qemu.toml"
+INNEREOF
+    # k3s only reads config.toml.tmpl at containerd startup — force a reload. Try both unit
+    # names since either can be present depending on whether this node is a server or agent.
+    systemctl restart k3s-agent 2>/dev/null || systemctl restart k3s 2>/dev/null || true
+    echo CHANGED
+fi
+FIXEOF
+)
+FIX_SCRIPT_B64=$(printf '%s' "$K3S_FIX_SCRIPT" | base64 | tr -d '\n')
+
+echo "🔍 Checking target node(s) for k3s (kata-deploy doesn't auto-wire k3s's containerd)..."
+for node in $(echo "$LABELED" | sed 's#node/##'); do
+    RUNTIME=$(kubectl get node "$node" -o jsonpath='{.status.nodeInfo.containerRuntimeVersion}' 2>/dev/null || true)
+    case "$RUNTIME" in
+        *-k3s*)
+            echo "   🔧 ${node}: k3s detected (${RUNTIME}) — patching containerd directly"
+            FIXPOD="kata-k3s-fix-${node//[^a-zA-Z0-9-]/-}"
+            kubectl delete pod "$FIXPOD" --ignore-not-found >/dev/null 2>&1 || true
+            cat <<PODEOF | kubectl apply -f - >/dev/null
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${FIXPOD}
+spec:
+  nodeName: ${node}
+  hostPID: true
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+  volumes:
+    - name: host-tmp
+      hostPath: { path: /tmp }
+  containers:
+    - name: fix
+      image: busybox:1.36
+      securityContext:
+        privileged: true
+      env:
+        - name: FIX_SCRIPT_B64
+          value: "${FIX_SCRIPT_B64}"
+      volumeMounts:
+        - name: host-tmp
+          mountPath: /host-tmp
+      command:
+        - sh
+        - -c
+        - |
+          echo "\$FIX_SCRIPT_B64" | base64 -d > /host-tmp/kata-k3s-fix.sh
+          chmod +x /host-tmp/kata-k3s-fix.sh
+          nsenter -t 1 -m -u -i -n -p -- sh /tmp/kata-k3s-fix.sh
+          rm -f /host-tmp/kata-k3s-fix.sh
+PODEOF
+            if ! kubectl wait --for=jsonpath='{.status.phase}'=Succeeded "pod/${FIXPOD}" --timeout=60s >/dev/null 2>&1; then
+                echo "   ❌ ${node}: containerd-wiring pod did not complete — inspect it before continuing:"
+                echo "        kubectl logs ${FIXPOD}"
+                kubectl logs "$FIXPOD" 2>/dev/null || true
+                kubectl delete pod "$FIXPOD" --ignore-not-found >/dev/null 2>&1 || true
+                exit 1
+            fi
+            RESULT=$(kubectl logs "$FIXPOD" 2>/dev/null | tail -1)
+            kubectl delete pod "$FIXPOD" --ignore-not-found >/dev/null 2>&1 || true
+            if [ "$RESULT" = "CHANGED" ]; then
+                echo "   🔄 ${node}: containerd config changed — waiting for the node to rejoin Ready..."
+                kubectl wait --for=condition=Ready "node/${node}" --timeout=180s
+            else
+                echo "   ✅ ${node}: containerd kata-qemu runtime already wired"
+            fi
+            ;;
+        *)
+            echo "   ✅ ${node}: not k3s (${RUNTIME:-unknown}) — kata-deploy's systemd/containerd install applies"
+            ;;
+    esac
+done
+
 # --- 3. Register the RuntimeClass (with scheduling) and taint the node ---
 echo "🧩 Registering the '${KATA_RUNTIME_CLASS}' RuntimeClass..."
 if [ -f "$SCRIPT_DIR/../k8s/kata-runtimeclass.yaml" ]; then

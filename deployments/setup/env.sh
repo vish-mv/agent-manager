@@ -30,14 +30,13 @@ GVISOR_NODE_LABEL_VALUE="true"
 # (traces/metrics/gateway) fails under the default netstack on your CNI/overlay.
 GVISOR_NETWORK_HOST="${GVISOR_NETWORK_HOST:-false}"
 
-# Kata Containers isolation tier — a dedicated node added to the EXISTING cluster
+# Kata Containers isolation tier — a real (non-Docker) node joined to the EXISTING cluster
 # (see `make setup-kata`) on which kata-deploy installs the Kata runtime. Unlike
 # gVisor (userspace kernel), Kata boots each agent in a lightweight VM with its own
 # kernel, so the node MUST expose nested virtualization (/dev/kvm). Agents in an
 # environment whose isolationTier is "kata" get runtimeClassName=kata-qemu and land
 # on this node. kata-deploy + the install touch ONLY this new node — the server node
 # and existing runc agents are never reconfigured, so there is no downtime.
-KATA_NODE_NAME="kata"             # k3d agent node name → node/container "k3d-kata-0"
 KATA_RUNTIME_CLASS="kata-qemu"    # RuntimeClass name == handler kata-deploy registers
 KATA_NODE_LABEL_KEY="kata"        # node label + RuntimeClass scheduling key + taint key
 KATA_NODE_LABEL_VALUE="true"

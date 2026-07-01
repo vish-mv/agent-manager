@@ -41,16 +41,31 @@ every running runc agent are untouched.
 - A runc env's `SandboxTemplate` renders **byte-identical** (the `runtimeClassName` field is
   omitted for runc via `oc_omit()`), so no pod restart for existing agents.
 
-### Two install paths (why they differ)
+### Install paths (why they differ)
 
 | | Where | Mechanism | Script |
 |---|---|---|---|
-| **Production** | Real Linux nodes (systemd) | upstream **kata-deploy** DaemonSet installs the full Kata stack + reconfigures containerd via systemctl | `deployments/setup/install-kata.sh` |
-| **Dev (k3d)** | k3d node container (no systemd) | install the **Kata static tarball** into the node + write the k3s `config.toml.tmpl` + `docker restart` to reload — the same proven trick as `setup-gvisor-node.sh` | `make setup-kata` / `setup-kata-node.sh` |
+| **Production** | Real Linux nodes (systemd) | upstream **kata-deploy** DaemonSet installs the full Kata stack + reconfigures containerd via systemctl (or, on a k3s node, via the same `.tmpl` patch below) | `deployments/setup/install-kata.sh` |
+| **Dev (k3d)** | A real (non-Docker) node **joined** to the existing k3d cluster | run `k3s agent` directly on the host, pointed at the k3d server's token/address — the same thing `k3d node create` does under the hood, minus the container. Gives Kata a genuine glibc/systemd/journald/vsock-capable node without discarding the working cluster, then delegates to `install-kata.sh`. | `make setup-kata` / `setup-kata-node.sh` |
 
 Both scope the install to the `kata=true` node only, so the server node's containerd is never
 touched. kata-deploy is scoped by injecting a `nodeSelector` into its DaemonSet **before** apply
 (so it never lands on the server node, even briefly).
+
+**Why the dev path joins a real node instead of creating a k3d node container** (like
+`setup-gvisor-node.sh` does for gVisor): confirmed via live testing that k3d node containers
+cannot boot a Kata VM at all — see §9. A k3d node is a minimal container missing the
+glibc/journald/vsock support Kata's guest-agent handshake needs, and no amount of patching
+closes that gap. Joining a real k3s agent directly to the same cluster sidesteps it entirely
+while leaving the already-running server/runc/gVisor nodes untouched.
+
+**`install-kata.sh` auto-detects k3s nodes** (both paths above can end up targeting one) and
+patches their containerd directly: upstream kata-deploy only recognizes a handful of distro
+markers and otherwise writes to `/etc/containerd/config.toml` + `systemctl restart containerd`,
+neither of which k3s uses (k3s bundles its own containerd, wired only via
+`.../agent/etc/containerd/config.toml.tmpl`, read once at startup). The fix runs as a short-lived
+privileged pod that `nsenter`s into the target node's host namespaces — this works even when
+`install-kata.sh` is run from a separate machine with only kubectl access, not SSH.
 
 ---
 
@@ -95,7 +110,7 @@ the `isolation-tier` annotation) is tier-agnostic and already worked.
 so it carries `kata-qemu` with no change.
 
 **Scripts & manifests**
-- `deployments/setup/setup-kata-node.sh` — **dev/k3d**: add a Kata node to the running cluster (`make setup-kata`).
+- `deployments/setup/setup-kata-node.sh` — **dev/k3d**: joins a real (non-Docker) node to the running cluster and installs Kata on it (`make setup-kata`).
 - `deployments/setup/install-kata.sh` — **production**: kata-deploy onto labeled Linux node(s).
 - `deployments/k8s/kata-runtimeclass.yaml` — the `kata-qemu` RuntimeClass + scheduling.
 - `deployments/setup/env.sh` — `KATA_*` vars (`KATA_RUNTIME_CLASS=kata-qemu`, `KATA_VERSION`, label/taint keys).
@@ -112,7 +127,7 @@ Kata node with no extra change.
 **Dev (k3d on a KVM-capable Linux host, e.g. your GCP VM):**
 ```bash
 make setup          # normal cluster
-make setup-kata     # add the Kata node + RuntimeClass + Fluent Bit toleration
+make setup-kata     # join a real node to the cluster + install Kata + RuntimeClass + Fluent Bit toleration
                     # (aborts if /dev/kvm is missing)
 
 # create a Kata environment
@@ -164,25 +179,25 @@ there applies verbatim; just substitute `runtimeClassName: kata-qemu`.
 ## 8. Troubleshooting
 
 ### Pod stuck in `ContainerCreating` / `CrashLoopBackOff`
-Almost always **no nested virtualization**. Confirm on the Kata node:
+Almost always **no nested virtualization**. The Kata node is a real host in both dev and
+production now (see §3) — confirm directly on it (SSH in, or run locally if you're already on
+it):
 ```bash
-docker exec k3d-kata-0 ls -l /dev/kvm          # dev/k3d
-ls -l /dev/kvm; cat /sys/module/kvm_intel/parameters/nested   # production node
+ls -l /dev/kvm; cat /sys/module/kvm_intel/parameters/nested   # expect the device + "Y"
 kubectl describe pod <pod> -n <ns>             # look for kvm / RuntimeClass errors
 ```
 No `/dev/kvm` → move to an Intel-N2 / bare-metal host with nested virt enabled.
 
 ### `no handler found` for `kata-qemu`
-The RuntimeClass exists but containerd has no `kata-qemu` runtime (install didn't complete or
-the node didn't reload containerd):
+The RuntimeClass exists but containerd has no `kata-qemu` runtime (install didn't complete, the
+`install-kata.sh` k3s auto-wiring step didn't run, or the node didn't reload containerd):
 ```bash
 kubectl get runtimeclass kata-qemu
-# dev/k3d: confirm the runtime is in the node's containerd config, then restart the node
-docker exec k3d-kata-0 grep -n kata-qemu /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
-docker restart k3d-kata-0
-# production: check kata-deploy finished
 kubectl -n kube-system rollout status daemonset/kata-deploy
 kubectl -n kube-system logs -l name=kata-deploy
+# on the node itself: confirm the runtime is actually in containerd's config
+sudo grep -n kata-qemu /var/lib/rancher/k3s/agent/etc/containerd/config.toml   # k3s nodes
+grep -n kata-qemu /etc/containerd/config.toml                                  # non-k3s nodes
 ```
 
 ### Verify isolation is real (different kernel = VM)
@@ -203,9 +218,19 @@ Work the runbook in [gvisor-isolation-tier.md §8](gvisor-isolation-tier.md) wit
 
 ## 9. Still open / caveats
 
-- **k3d + Kata** is the least-trodden path (no systemd, hand-rolled static install). The
-  `setup-kata-node.sh` mechanism mirrors the working gVisor one, but expect to iterate on a real
-  KVM VM — the sanity check at the end of the script (pod kernel ≠ node kernel) tells you if it worked.
+- **k3d node containers cannot actually boot a Kata VM**, confirmed via live testing (glibc
+  loader, `/dev/log`, and `vhost_vsock` are all absent from the minimal k3s node image, and the
+  host↔guest vsock handshake times out even after papering over the first three). This is why
+  `setup-kata-node.sh` doesn't create a k3d node container the way `setup-gvisor-node.sh` does —
+  it joins a real (non-Docker) node to the cluster instead (see §3). There is no k3d-container
+  fallback kept around; it's a confirmed dead end, not worth re-attempting. The sanity check at
+  the end of the script (pod `uname -r` ≠ node `uname -r`) tells you definitively whether the
+  real-node join worked.
+- **The dev join path is dev/test-only in one respect, not a production pattern** — it depends on
+  `host.k3d.internal` and `/etc/rancher/k3s/registries.yaml`, both of which only exist because
+  the workflow-plane's local dev registry uses that alias. A real customer cluster has neither
+  concern (real registries resolve normally over real DNS), so this gap doesn't affect
+  `install-kata.sh` run against an actual production cluster — only the local k3d dev workflow.
 - **Nested-virt performance** — VM boot adds startup latency vs. runc/gVisor; warm pools help.
 - **API-publish on first deploy (chat-404)** — pre-existing, affects all tiers; see the gVisor doc §9.
 - **Sandbox Router** — upstream recommends the Sandbox Router (X-Sandbox-ID) for direct sandbox
