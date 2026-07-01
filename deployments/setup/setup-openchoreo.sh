@@ -77,7 +77,7 @@ install_control_plane() {
             echo "❌ Failed to patch openchoreo-api-config entitlement claim to client_id"
             return 1
         fi
-        echo "$patched_yaml" | kubectl apply --server-side --field-manager=helm -f -
+        echo "$patched_yaml" | kubectl apply --server-side --force-conflicts --field-manager=helm -f -
         kubectl rollout restart deployment/openchoreo-api -n openchoreo-control-plane
         kubectl rollout status deployment/openchoreo-api -n openchoreo-control-plane --timeout=120s
         echo "✅ openchoreo-api-config patched (client_id claim)"
@@ -272,7 +272,7 @@ install_observability_plane() {
             echo "❌ Failed to patch observer-auth-config entitlement claim to client_id"
             return 1
         fi
-        echo "$patched_obs_yaml" | kubectl apply --server-side --field-manager=helm -f -
+        echo "$patched_obs_yaml" | kubectl apply --server-side --force-conflicts --field-manager=helm -f -
         kubectl rollout restart deployment/observer -n openchoreo-observability-plane
         kubectl rollout status deployment/observer -n openchoreo-observability-plane --timeout=120s
         echo "✅ observer-auth-config patched (client_id claim)"
