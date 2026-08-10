@@ -3757,11 +3757,17 @@ type ListCommitsRequest struct {
 	// Branch Branch name or SHA to list commits from (defaults to repository's default branch)
 	Branch *string `json:"branch,omitempty"`
 
+	// ComponentName Optional component name used to resolve a deployment-specific repository binding
+	ComponentName *string `json:"componentName,omitempty"`
+
 	// Owner Repository owner (organization or user)
 	Owner string `json:"owner"`
 
 	// Path Filter commits affecting this file path
 	Path *string `json:"path,omitempty"`
+
+	// ProjectName Optional project name used to resolve a deployment-specific repository binding
+	ProjectName *string `json:"projectName,omitempty"`
 
 	// Repo Repository name
 	Repo string `json:"repo"`

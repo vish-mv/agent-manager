@@ -4902,8 +4902,10 @@ paths:
     post:
       summary: List commits for a repository
       description: |
-        Returns a list of commits for the specified public repository.
-        Currently supports GitHub repositories only.
+        Returns a list of commits for the specified repository.
+        Deployments may use projectName and componentName to resolve a
+        deployment-specific repository binding. When no binding exists, the
+        request uses the standard public or secretRef-backed GitHub flow.
       operationId: listRepositoryCommits
       parameters:
         - name: limit
@@ -13776,6 +13778,12 @@ components:
         secretRef:
           type: string
           description: Secret reference name for private repository Git credentials
+        projectName:
+          type: string
+          description: Optional project name used to resolve a deployment-specific repository binding
+        componentName:
+          type: string
+          description: Optional component name used to resolve a deployment-specific repository binding
 
     ListCommitsResponse:
       type: object
