@@ -72,6 +72,10 @@ type Options struct {
 	// the env-Thunder system-client credential from AMS's own Postgres — that one
 	// is not read back from a key vault.
 	AgentThunderProvisioning func(db *gorm.DB, secretMgmtClient secretmanagersvc.SecretManagementClient, ocClient occlient.OpenChoreoClient, encryptionKey []byte) services.AgentThunderProvisioningService
+	// RepositoryCommitProvider optionally resolves commit history from a
+	// deployment-specific component source binding. nil preserves the standard
+	// anonymous/static-token and PAT-backed repository behavior.
+	RepositoryCommitProvider services.RepositoryCommitProvider
 }
 
 // Run starts the application with the provided providers and options.
@@ -155,6 +159,8 @@ func Run(authProvider occlient.AuthProvider, secretProvider secretmanagersvc.Pro
 	if setter, ok := agentThunderProvisioning.(services.WorkloadInjectorSetter); ok {
 		setter.SetWorkloadInjector(dependencies.AgentIdentityInjectionService)
 	}
+
+	dependencies.RepositoryService.SetCommitProvider(opts.RepositoryCommitProvider)
 
 	// Background workers have no request behind them, so nothing installs a
 	// recorder on their contexts the way the HTTP middleware does. Install one
