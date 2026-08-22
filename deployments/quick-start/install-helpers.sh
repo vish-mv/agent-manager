@@ -355,19 +355,22 @@ install_evaluation_extension() {
     local network_policy_args=() node_cidr
     node_cidr=$(docker network inspect "k3d-${CLUSTER_NAME}" \
         --format '{{ (index .IPAM.Config 0).Subnet }}' 2>/dev/null || echo "")
-    if [[ -n "$node_cidr" ]]; then
-        network_policy_args=(
-            --set "networkPolicy.evaluationJob.apiServer.cidrs[0]=${node_cidr}"
-            --set "networkPolicy.evaluationJob.devEgress.cidr=${node_cidr}"
-            --set "networkPolicy.evaluationJob.devEgress.ports={19080}"
-        )
+    if [[ -z "$node_cidr" ]]; then
+        echo "Failed to discover the k3d-${CLUSTER_NAME} network CIDR." >&2
+        echo "Evaluation jobs require that CIDR to reach the local LLM gateway on port 19080." >&2
+        return 1
     fi
+    network_policy_args=(
+        --set "networkPolicy.evaluationJob.apiServer.cidrs[0]=${node_cidr}"
+        --set "networkPolicy.evaluationJob.devEgress.cidr=${node_cidr}"
+        --set "networkPolicy.evaluationJob.devEgress.ports={19080}"
+    )
 
     # Install Helm chart
     if ! install_amp_helm_chart "${release_name}" "${chart_ref}" "${EVALUATION_NS}" "${TIMEOUT_AMP_INSTALL}" \
         --version "${chart_version}" \
-        ${network_policy_args[@]+"${network_policy_args[@]}"} \
-        "${EVALUATION_HELM_ARGS[@]}"; then
+        "${EVALUATION_HELM_ARGS[@]}" \
+        "${network_policy_args[@]}"; then
         return 1
     fi
 
