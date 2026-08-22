@@ -347,19 +347,26 @@ install_evaluation_extension() {
     # order doesn't depend on a workflow having already run.
     kubectl create namespace workflows-default --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-    # The eval pod runs untrusted evaluator code, so scope its API-server egress to the k3d node
-    # network rather than taking the chart's RFC1918 default, which also spans pod and service CIDRs.
-    local api_server_args=() node_cidr
+    # The eval pod runs untrusted evaluator code, so scope node-network egress to
+    # this k3d network rather than taking the chart's RFC1918 API-server default.
+    # The public LLM gateway hostname is rewritten by CoreDNS to host.k3d.internal
+    # and reached through the node-published port 19080, so the namespace/22893
+    # rule alone cannot match it after DNS resolution.
+    local network_policy_args=() node_cidr
     node_cidr=$(docker network inspect "k3d-${CLUSTER_NAME}" \
         --format '{{ (index .IPAM.Config 0).Subnet }}' 2>/dev/null || echo "")
     if [[ -n "$node_cidr" ]]; then
-        api_server_args=(--set "networkPolicy.evaluationJob.apiServer.cidrs[0]=${node_cidr}")
+        network_policy_args=(
+            --set "networkPolicy.evaluationJob.apiServer.cidrs[0]=${node_cidr}"
+            --set "networkPolicy.evaluationJob.devEgress.cidr=${node_cidr}"
+            --set "networkPolicy.evaluationJob.devEgress.ports={19080}"
+        )
     fi
 
     # Install Helm chart
     if ! install_amp_helm_chart "${release_name}" "${chart_ref}" "${EVALUATION_NS}" "${TIMEOUT_AMP_INSTALL}" \
         --version "${chart_version}" \
-        ${api_server_args[@]+"${api_server_args[@]}"} \
+        ${network_policy_args[@]+"${network_policy_args[@]}"} \
         "${EVALUATION_HELM_ARGS[@]}"; then
         return 1
     fi
